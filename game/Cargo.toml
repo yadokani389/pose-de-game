@@ -1,0 +1,10 @@
+[package]
+edition = "2024"
+name = "pose-de-game"
+version = "0.1.0"
+
+[dependencies]
+anyhow = "1.0.100"
+bevy = "0.17.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_cbor = "0.11.2"

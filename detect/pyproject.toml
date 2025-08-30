@@ -1,0 +1,11 @@
+[project]
+dependencies = ["cbor2>=5.7.0", "ultralytics>=8.3.189"]
+description = "Add your description here"
+name = "yolo-playground"
+readme = "README.md"
+requires-python = ">=3.13"
+version = "0.1.0"
+
+[tool.pyright]
+venv = ".venv"
+venvPath = "."
