@@ -5,6 +5,7 @@ use matchbox_socket::PeerId;
 
 mod ball;
 mod components;
+mod debug;
 mod field;
 mod item;
 mod menu;
@@ -12,7 +13,7 @@ mod online;
 mod paddle;
 mod timer;
 
-type Config = bevy_ggrs::GgrsConfig<u8, PeerId>;
+type Config = bevy_ggrs::GgrsConfig<f32, PeerId>;
 
 pub struct GamePlugin;
 
@@ -22,6 +23,7 @@ impl Plugin for GamePlugin {
             GgrsPlugin::<Config>::default(),
             menu::MenuPlugin,
             ball::BallPlugin,
+            debug::DebugPlugin,
             field::FieldPlugin,
             paddle::PaddlePlugin,
             online::OnlinePlugin,

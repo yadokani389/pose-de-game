@@ -73,7 +73,12 @@
               xorg.libXrandr
             ];
 
-            cargoDeps = rustPlatform.importCargoLock { lockFile = ./game/Cargo.lock; };
+            cargoDeps = rustPlatform.importCargoLock {
+              lockFile = ./game/Cargo.lock;
+              outputHashes = {
+                "bevy-wasm-tasks-0.16.0" = "sha256-8RBYwPmGiiXVkmIrV/n2UhIDEX8UzAwIUZV+PcSog5c=";
+              };
+            };
 
             postFixup =
               with pkgs;
@@ -129,6 +134,10 @@
                 alsa-lib
                 kdePackages.wayland
                 stdenv.cc.cc.lib
+
+                # for detect
+                libglvnd
+                glib
               ];
           };
 

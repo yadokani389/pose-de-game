@@ -34,6 +34,9 @@ pub struct Wall {
 }
 
 #[derive(Component)]
+pub struct SideWall;
+
+#[derive(Component)]
 pub struct Cell {
     pub half_size: Vec2,
 }
@@ -131,6 +134,7 @@ fn setup_field(mut commands: Commands) {
             Vec2::new(wall_thickness, wall_height + wall_thickness),
         ),
         Transform::from_xyz(-(wall_width + wall_thickness) / 2., 0., 6.),
+        SideWall,
     ));
     commands.spawn((
         Wall { half_size },
@@ -139,6 +143,7 @@ fn setup_field(mut commands: Commands) {
             Vec2::new(wall_thickness, wall_height + wall_thickness),
         ),
         Transform::from_xyz((wall_width + wall_thickness) / 2., 0., 6.),
+        SideWall,
     ));
 }
 

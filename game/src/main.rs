@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::{net::UdpSocket, time::Duration};
 
 use bevy::prelude::*;
@@ -5,7 +7,7 @@ use clap::Parser;
 
 mod args;
 mod breakout;
-// mod game;
+mod pose;
 
 const LISTEN_ADDRESS: &str = "127.0.0.1:45233";
 
@@ -37,6 +39,7 @@ fn main() {
                 }),
                 ..default()
             }),
+            pose::PosePlugin,
             breakout::GamePlugin,
         ))
         .insert_resource(UdpSocketResource(socket))
