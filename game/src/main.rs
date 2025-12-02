@@ -1,8 +1,11 @@
 use std::{net::UdpSocket, time::Duration};
 
 use bevy::prelude::*;
+use clap::Parser;
 
-mod game;
+mod args;
+mod breakout;
+// mod game;
 
 const LISTEN_ADDRESS: &str = "127.0.0.1:45233";
 
@@ -20,6 +23,8 @@ fn main() {
 
     info!("Server now listening on {}", LISTEN_ADDRESS);
 
+    let args = args::Args::parse();
+
     App::new()
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
@@ -32,8 +37,9 @@ fn main() {
                 }),
                 ..default()
             }),
-            game::GamePlugin,
+            breakout::GamePlugin,
         ))
         .insert_resource(UdpSocketResource(socket))
+        .insert_resource(args)
         .run();
 }
