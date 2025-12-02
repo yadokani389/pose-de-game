@@ -20,13 +20,15 @@
     inputs@{
       nixpkgs,
       flake-parts,
-      rust-overlay,
       ...
     }:
 
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
         "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
       ];
 
       imports = with inputs; [
@@ -47,7 +49,6 @@
             cargo = toolchain;
             rustc = toolchain;
           };
-
           pose-de-game = rustPlatform.buildRustPackage {
             pname = "pose-de-game";
             version = "0.1.0";
@@ -57,11 +58,11 @@
             nativeBuildInputs = with pkgs; [
               makeWrapper
               pkg-config
-              clang
             ];
 
             buildInputs = with pkgs; [
               zstd
+              libglvnd
               alsa-lib
               udev
               vulkan-loader
@@ -74,9 +75,6 @@
 
             cargoDeps = rustPlatform.importCargoLock { lockFile = ./game/Cargo.lock; };
 
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            BINDGEN_EXTRA_CLANG_ARGS = "-I${pkgs.linuxHeaders}/include -I${pkgs.glibc.dev}/include";
-
             postFixup =
               with pkgs;
               lib.optionalString stdenv.hostPlatform.isLinux ''
@@ -85,10 +83,18 @@
                     lib.makeLibraryPath [
                       libxkbcommon
                       vulkan-loader
-                      kdePackages.wayland
                     ]
                   }
               '';
+
+            meta = {
+              homepage = "https://github.com/yadokani389/pose-de-game";
+              license = with pkgs.lib.licenses; [
+                asl20
+                mit
+              ];
+              mainProgram = "pose-de-game";
+            };
           };
         in
         {
@@ -105,14 +111,13 @@
               pose-de-game
             ];
 
-            packages = [
-              toolchain
+            packages = with pkgs; [
+              vulkan-headers
               (pkgs.python313.withPackages (ps: [
                 ps.ultralytics
                 ps.opencv4
                 ps.cbor2
               ]))
-              pkgs.rust-analyzer
             ];
 
             LD_LIBRARY_PATH =
@@ -123,10 +128,8 @@
                 udev
                 alsa-lib
                 kdePackages.wayland
+                stdenv.cc.cc.lib
               ];
-
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            BINDGEN_EXTRA_CLANG_ARGS = "-I${pkgs.linuxHeaders}/include -I${pkgs.glibc.dev}/include";
           };
 
           treefmt = {
@@ -135,7 +138,6 @@
               nixfmt.enable = true;
               rustfmt.enable = true;
               taplo.enable = true;
-              ruff.enable = true;
             };
 
             settings.formatter = {
@@ -158,8 +160,7 @@
                   enable = true;
                   packageOverrides.cargo = toolchain;
                   packageOverrides.clippy = toolchain;
-                  settings.extraArgs = "--manifest-path game/Cargo.toml";
-                  extraPackages = pose-de-game.nativeBuildInputs ++ pose-de-game.buildInputs;
+                  settings.extraArgs = "--manifest-path game/Cargo.toml --all-targets";
                 };
               };
             };
