@@ -58,7 +58,6 @@ fn show_textbox(mut context: EguiContexts, mut args: ResMut<Args>) {
         });
 }
 
-#[allow(clippy::type_complexity)]
 fn button_system(
     query: Query<
         (&Interaction, &mut BackgroundColor, &mut BorderColor),

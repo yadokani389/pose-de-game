@@ -25,12 +25,6 @@ enum SocketResource {
     },
 }
 
-impl SocketResource {
-    fn is_udp(&self) -> bool {
-        matches!(self, SocketResource::Udp(_))
-    }
-}
-
 fn main() {
     let args = args::Args::parse();
 

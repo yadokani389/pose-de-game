@@ -23,6 +23,9 @@ struct PersonImageDebug {
     handle: Handle<Image>,
 }
 
+#[derive(Component)]
+struct PersonImageDebugSprite;
+
 fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let extent = Extent3d {
         width: 1000,
@@ -35,16 +38,18 @@ fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         TextureDimension::D2,
         &[0, 0, 0, 0],
         TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        RenderAssetUsages::default(),
     );
     let image_handle = images.add(image);
 
     commands.spawn((
         Sprite {
             image: image_handle.clone(),
+            flip_x: true,
             ..default()
         },
-        Transform::default(),
+        Transform::from_xyz(0., 0., 15.),
+        PersonImageDebugSprite,
     ));
 
     commands.insert_resource(PersonImageDebug {
@@ -58,9 +63,10 @@ fn show_right_hand(people: Res<PeopleDataRes>, mut gizmos: Gizmos) {
     };
 
     pos[0] -= 0.5;
+    pos[1] -= 0.5;
     pos[0] *= -2. * FIELD_WIDTH as f64 * CELL_SIZE as f64;
     pos[1] *= -2. * FIELD_WIDTH as f64 * CELL_SIZE as f64;
-    println!("{pos:?}");
+
     gizmos.circle_2d(Vec2::new(pos[0] as f32, pos[1] as f32), 10.0, Color::BLACK);
 }
 
@@ -71,6 +77,7 @@ fn get_right_hand_pos(people: &PeopleDataRes) -> Option<[f64; 2]> {
 fn show_person_image(
     people: Res<PeopleDataRes>,
     mut images: ResMut<Assets<Image>>,
+    mut sprite: Single<&mut Sprite, With<PersonImageDebugSprite>>,
     debug_image: Res<PersonImageDebug>,
 ) {
     let Some(person) = people.first() else {
@@ -82,6 +89,37 @@ fn show_person_image(
     };
 
     if let Some(image) = images.get_mut(&debug_image.handle) {
-        *image = person_image.0.clone();
+        let mut img = person_image.0.clone();
+        dim_alpha(&mut img);
+        *image = img;
+        let size = image.size_f32() / (image.width() as f32) * 2. * FIELD_WIDTH as f32 * CELL_SIZE;
+        if sprite.custom_size != Some(size) {
+            sprite.custom_size.replace(size);
+        }
+    }
+}
+
+fn dim_alpha(image: &mut Image) {
+    if image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb {
+        return;
+    }
+
+    let width = image.texture_descriptor.size.width as usize;
+    let height = image.texture_descriptor.size.height as usize;
+    let stride = width * 4;
+
+    let Some(layer) = image.data.as_mut() else {
+        return;
+    };
+    let data: &mut [u8] = layer.as_mut_slice();
+
+    for y in 0..height {
+        let row_offset = y * stride;
+
+        // Halve alpha
+        for x in 0..width {
+            let alpha_idx = row_offset + x * 4 + 3;
+            data[alpha_idx] >>= 1;
+        }
     }
 }
