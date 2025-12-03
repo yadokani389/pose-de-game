@@ -6380,7 +6380,6 @@ dependencies = [
  "bevy_ggrs",
  "clap",
  "futures",
- "image",
  "iroh",
  "iroh-gossip",
  "matchbox_socket",

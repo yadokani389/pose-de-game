@@ -82,11 +82,6 @@ fn show_person_image(
     };
 
     if let Some(image) = images.get_mut(&debug_image.handle) {
-        image.resize(Extent3d {
-            width: person_image.width,
-            height: person_image.height,
-            depth_or_array_layers: 1,
-        });
-        image.data.replace(person_image.rgba.clone());
+        *image = person_image.0.clone();
     }
 }

@@ -1,5 +1,8 @@
-use bevy::prelude::*;
-use image::ImageFormat;
+use bevy::{
+    asset::RenderAssetUsages,
+    image::{CompressedImageFormats, ImageFormat, ImageSampler, ImageType},
+    prelude::*,
+};
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::io::{self, Read};
@@ -52,11 +55,7 @@ struct PersonPayload {
 }
 
 #[derive(Debug, Clone)]
-pub struct PersonImage {
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
-}
+pub struct PersonImage(pub Image);
 
 #[derive(Debug, Clone)]
 pub struct PersonData {
@@ -118,16 +117,17 @@ impl PersonPayload {
     }
 }
 
-fn decode_person_png(bytes: &[u8]) -> Result<PersonImage, image::ImageError> {
-    let image = image::load_from_memory_with_format(bytes, ImageFormat::Png)?;
-    let rgba = image.to_rgba8();
-    let (width, height) = rgba.dimensions();
+fn decode_person_png(bytes: &[u8]) -> Result<PersonImage, TextureError> {
+    let image = Image::from_buffer(
+        bytes,
+        ImageType::Format(ImageFormat::Png),
+        CompressedImageFormats::empty(),
+        true,
+        ImageSampler::Default,
+        RenderAssetUsages::default(),
+    )?;
 
-    Ok(PersonImage {
-        width,
-        height,
-        rgba: rgba.into_raw(),
-    })
+    Ok(PersonImage(image))
 }
 
 fn recv_message(
