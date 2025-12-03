@@ -70,6 +70,8 @@ def mask_to_png(image_bgr: np.ndarray, mask: np.ndarray) -> bytes:
 pose = YOLO("./yolo11n-pose.pt")
 seg = YOLO("./yolo11n-seg.pt")
 cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 while cap.isOpened():
     success, image = cap.read()
