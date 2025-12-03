@@ -2,6 +2,9 @@ use bevy::prelude::*;
 use image::ImageFormat;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
+use std::io::{self, Read};
+#[cfg(unix)]
+use std::os::unix::net::{UnixListener, UnixStream};
 
 pub struct PosePlugin;
 
@@ -14,11 +17,12 @@ impl Plugin for PosePlugin {
 }
 
 fn receive_data(
-    socket: Res<super::UdpSocketResource>,
+    mut socket: ResMut<super::SocketResource>,
     mut people_data: ResMut<PeopleDataRes>,
-    mut buffer: Local<UdpBuffer>,
+    mut buffer: Local<SocketBuffer>,
+    mut stream_state: Local<StreamState>,
 ) {
-    let Ok(size) = socket.0.recv(&mut buffer) else {
+    let Ok(Some(size)) = recv_message(&mut socket, &mut buffer, &mut stream_state) else {
         return;
     };
 
@@ -69,12 +73,20 @@ type PeopleData = Vec<PersonData>;
 pub struct PeopleDataRes(PeopleData);
 
 #[derive(Deref, DerefMut)]
-struct UdpBuffer(Vec<u8>);
+struct SocketBuffer(Vec<u8>);
 
-impl Default for UdpBuffer {
+impl Default for SocketBuffer {
     fn default() -> Self {
-        Self(vec![0; 65536])
+        Self(vec![0; 1_000_000])
     }
+}
+
+#[derive(Default)]
+struct StreamState {
+    prefix: [u8; 4],
+    prefix_read: usize,
+    expected_len: Option<usize>,
+    body_read: usize,
 }
 
 impl PersonPayload {
@@ -116,4 +128,96 @@ fn decode_person_png(bytes: &[u8]) -> Result<PersonImage, image::ImageError> {
         height,
         rgba: rgba.into_raw(),
     })
+}
+
+fn recv_message(
+    socket: &mut super::SocketResource,
+    buffer: &mut SocketBuffer,
+    stream_state: &mut StreamState,
+) -> io::Result<Option<usize>> {
+    match socket {
+        super::SocketResource::Udp(sock) => {
+            let size = sock.recv(&mut buffer[..])?;
+            Ok(Some(size))
+        }
+        #[cfg(unix)]
+        super::SocketResource::UnixStream { listener, stream } => {
+            recv_unix_stream(listener, stream, buffer, stream_state)
+        }
+    }
+}
+
+#[cfg(unix)]
+fn recv_unix_stream(
+    listener: &UnixListener,
+    stream_opt: &mut Option<UnixStream>,
+    buffer: &mut SocketBuffer,
+    state: &mut StreamState,
+) -> io::Result<Option<usize>> {
+    if stream_opt.is_none() {
+        match listener.accept() {
+            Ok((stream, _addr)) => {
+                stream.set_nonblocking(true)?;
+                *stream_opt = Some(stream);
+                state.reset();
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+            Err(err) => return Err(err),
+        }
+    }
+
+    let stream = match stream_opt.as_mut() {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+
+    // Read length prefix
+    if state.expected_len.is_none() {
+        while state.prefix_read < 4 {
+            match stream.read(&mut state.prefix[state.prefix_read..4]) {
+                Ok(0) => return drop_stream(stream_opt, state),
+                Ok(n) => state.prefix_read += n,
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+                Err(err) => return Err(err),
+            }
+        }
+        let len = u32::from_be_bytes(state.prefix) as usize;
+        state.expected_len = Some(len);
+        if buffer.len() < len {
+            buffer.resize(len, 0);
+        }
+    }
+
+    let expected = state.expected_len.unwrap();
+    while state.body_read < expected {
+        match stream.read(&mut buffer[state.body_read..expected]) {
+            Ok(0) => return drop_stream(stream_opt, state),
+            Ok(n) => state.body_read += n,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+            Err(err) => return Err(err),
+        }
+    }
+
+    let size = expected;
+    state.reset();
+    Ok(Some(size))
+}
+
+#[cfg(unix)]
+fn drop_stream(
+    stream_opt: &mut Option<UnixStream>,
+    state: &mut StreamState,
+) -> io::Result<Option<usize>> {
+    *stream_opt = None;
+    state.reset();
+    Ok(None)
+}
+
+impl StreamState {
+    fn reset(&mut self) {
+        self.prefix = [0; 4];
+        self.prefix_read = 0;
+        self.expected_len = None;
+        self.body_read = 0;
+    }
 }

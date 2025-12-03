@@ -6,6 +6,7 @@ version = "0.1.0"
 [dependencies]
 anyhow = "1.0.100"
 bevy = "0.17.3"
+clap = { version = "4.5.53", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_bytes = "0.11"
@@ -17,7 +18,6 @@ bevy-wasm-tasks = { git = "https://github.com/yadokani389/bevy-wasm-tasks", feat
 ] }
 bevy_egui = "0.38"
 bevy_ggrs = "0.19"
-clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.31"
 iroh = { version = "0.35", default-features = false }
 iroh-gossip = { version = "0.35", default-features = false, features = ["net"] }

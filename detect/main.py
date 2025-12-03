@@ -1,4 +1,6 @@
+import argparse
 import io
+import os
 import socket
 from typing import Dict
 
@@ -7,6 +9,19 @@ import cv2
 import numpy as np
 from PIL import Image
 from ultralytics import YOLO
+
+
+def default_unix_path() -> str:
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        return os.path.join(runtime_dir, "pose-de-game.sock")
+    return "/tmp/pose-de-game.sock"
+
+
+def resolve_transport(value: str) -> str:
+    if value == "auto":
+        return "unix" if os.name == "posix" else "udp"
+    return value
 
 
 def compute_iou(box_a: np.ndarray, box_b: np.ndarray) -> float:
@@ -67,96 +82,122 @@ def mask_to_png(image_bgr: np.ndarray, mask: np.ndarray) -> bytes:
     Image.fromarray(rgba).save(buf, format="PNG")
     return buf.getvalue()
 
-pose = YOLO("./yolo11n-pose.pt")
-seg = YOLO("./yolo11n-seg.pt")
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+def send_packet(data: bytes, transport: str, unix_path: str, udp_addr: str) -> None:
+    if transport == "unix":
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(unix_path)
+            length = len(data).to_bytes(4, "big")
+            sock.sendall(length + data)
+    else:
+        host, port_str = udp_addr.rsplit(":", 1)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.sendto(data, (host, int(port_str)))
 
-while cap.isOpened():
-    success, image = cap.read()
-    if not success:
-        continue
 
-    results = pose(image)[0]
-    seg_results = seg(image)[0]
-
-    if results.keypoints is None:
-        continue
-
-    # Extract keypoints and confidence for all people at once
-    xy = results.keypoints.xy.cpu().numpy()  # Shape: (n_people, 17, 2)
-    conf = (
-        results.keypoints.conf.cpu().numpy()
-        if results.keypoints.conf is not None
-        else np.ones((len(xy), 17))
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Pose detector sender")
+    parser.add_argument(
+        "--transport", choices=["auto", "unix", "udp"], default="auto"
     )
+    parser.add_argument("--unix-path", default=default_unix_path())
+    parser.add_argument("--udp-addr", default="127.0.0.1:45233")
+    args = parser.parse_args()
 
-    # Check if keypoints have the expected shape (17 joints)
-    if xy.shape[-2] == 0:
-        continue
+    transport = resolve_transport(args.transport)
 
-    # Vectorized processing
-    valid_mask = (conf > 0.8) & (xy[:, :, 0] > 1.0) & (xy[:, :, 1] > 1.0)
+    pose = YOLO("./yolo11n-pose.pt")
+    seg = YOLO("./yolo11n-seg.pt")
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # Get image dimensions for normalization
-    h, w = image.shape[:2]
+    while cap.isOpened():
+        success, image = cap.read()
+        if not success:
+            continue
 
-    pose_boxes = (
-        results.boxes.xyxy.cpu().numpy()
-        if results.boxes is not None
-        else np.zeros((len(xy), 4))
-    )
+        results = pose(image)[0]
+        seg_results = seg(image)[0]
 
-    seg_boxes = (
-        seg_results.boxes.xyxy.cpu().numpy()
-        if seg_results.boxes is not None
-        else np.zeros((0, 4))
-    )
+        if results.keypoints is None:
+            continue
 
-    segmentation_masks = []
-    if seg_results.masks is not None:
-        for mask in seg_results.masks.data.cpu().numpy():
-            resized = cv2.resize(
-                mask,
-                (w, h),
-                interpolation=cv2.INTER_NEAREST,
-            )
-            segmentation_masks.append(resized > 0.5)
-
-    mask_assignments = (
-        match_boxes(pose_boxes, seg_boxes)
-        if len(segmentation_masks) == len(seg_boxes)
-        else {}
-    )
-
-    people_data = []
-    for i in range(len(xy)):
-        body_keypoints = [
-            [float(xy[i, j, 0] / w), float(xy[i, j, 1] / h)]
-            if valid_mask[i, j]
-            else None
-            for j in range(17)
-        ]
-
-        png_bytes = None
-        seg_idx = mask_assignments.get(i)
-        if seg_idx is not None and seg_idx < len(segmentation_masks):
-            png_bytes = mask_to_png(image, segmentation_masks[seg_idx])
-
-        people_data.append(
-            {
-                "keypoints": body_keypoints,
-                "right_hand_closed": None,
-                "left_hand_closed": None,
-                "person_png": png_bytes,
-            }
+        # Extract keypoints and confidence for all people at once
+        xy = results.keypoints.xy.cpu().numpy()  # Shape: (n_people, 17, 2)
+        conf = (
+            results.keypoints.conf.cpu().numpy()
+            if results.keypoints.conf is not None
+            else np.ones((len(xy), 17))
         )
 
-    if people_data:
-        try:
-            cbor_data = cbor2.dumps(people_data)
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.sendto(cbor_data, ("127.0.0.1", 45233))
-        except Exception as e:
-            print(f"Error: {e}")
+        # Check if keypoints have the expected shape (17 joints)
+        if xy.shape[-2] == 0:
+            continue
+
+        # Vectorized processing
+        valid_mask = (conf > 0.8) & (xy[:, :, 0] > 1.0) & (xy[:, :, 1] > 1.0)
+
+        # Get image dimensions for normalization
+        h, w = image.shape[:2]
+
+        pose_boxes = (
+            results.boxes.xyxy.cpu().numpy()
+            if results.boxes is not None
+            else np.zeros((len(xy), 4))
+        )
+
+        seg_boxes = (
+            seg_results.boxes.xyxy.cpu().numpy()
+            if seg_results.boxes is not None
+            else np.zeros((0, 4))
+        )
+
+        segmentation_masks = []
+        if seg_results.masks is not None:
+            for mask in seg_results.masks.data.cpu().numpy():
+                resized = cv2.resize(
+                    mask,
+                    (w, h),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+                segmentation_masks.append(resized > 0.5)
+
+        mask_assignments = (
+            match_boxes(pose_boxes, seg_boxes)
+            if len(segmentation_masks) == len(seg_boxes)
+            else {}
+        )
+
+        people_data = []
+        for i in range(len(xy)):
+            body_keypoints = [
+                [float(xy[i, j, 0] / w), float(xy[i, j, 1] / h)]
+                if valid_mask[i, j]
+                else None
+                for j in range(17)
+            ]
+
+            png_bytes = None
+            seg_idx = mask_assignments.get(i)
+            if seg_idx is not None and seg_idx < len(segmentation_masks):
+                png_bytes = mask_to_png(image, segmentation_masks[seg_idx])
+
+            people_data.append(
+                {
+                    "keypoints": body_keypoints,
+                    "right_hand_closed": None,
+                    "left_hand_closed": None,
+                    "person_png": png_bytes,
+                }
+            )
+
+        if people_data:
+            try:
+                cbor_data = cbor2.dumps(people_data)
+                send_packet(cbor_data, transport, args.unix_path, args.udp_addr)
+            except Exception as e:
+                print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()

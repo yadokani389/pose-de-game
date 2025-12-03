@@ -1,6 +1,9 @@
 #![allow(clippy::type_complexity)]
 
-use std::{net::UdpSocket, time::Duration};
+use std::{env, fs, net::UdpSocket, path::PathBuf, time::Duration};
+
+#[cfg(unix)]
+use std::os::unix::net::{UnixListener, UnixStream};
 
 use bevy::prelude::*;
 use clap::Parser;
@@ -10,23 +13,31 @@ mod breakout;
 mod debug;
 mod pose;
 
-const LISTEN_ADDRESS: &str = "127.0.0.1:45233";
+const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Resource)]
-struct UdpSocketResource(UdpSocket);
+enum SocketResource {
+    Udp(UdpSocket),
+    #[cfg(unix)]
+    UnixStream {
+        listener: UnixListener,
+        stream: Option<UnixStream>,
+    },
+}
+
+impl SocketResource {
+    fn is_udp(&self) -> bool {
+        matches!(self, SocketResource::Udp(_))
+    }
+}
 
 fn main() {
-    let socket = UdpSocket::bind(LISTEN_ADDRESS).expect("could not bind socket");
-    socket
-        .set_nonblocking(true)
-        .expect("could not set socket to be nonblocking");
-    socket
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .expect("could not set read timeout");
-
-    info!("Server now listening on {}", LISTEN_ADDRESS);
-
     let args = args::Args::parse();
+
+    let (socket, transport_label) =
+        build_socket(&args).expect("failed to initialize listening socket");
+
+    info!("Server listening on {transport_label}");
 
     App::new()
         .add_plugins((
@@ -44,7 +55,77 @@ fn main() {
             breakout::GamePlugin,
             debug::DebugPlugin,
         ))
-        .insert_resource(UdpSocketResource(socket))
+        .insert_resource(socket)
         .insert_resource(args)
         .run();
+}
+
+fn resolve_transport(args: &args::Args) -> args::Transport {
+    match args.transport {
+        args::Transport::Auto => {
+            if cfg!(unix) {
+                args::Transport::Unix
+            } else {
+                args::Transport::Udp
+            }
+        }
+        other => other,
+    }
+}
+
+fn build_socket(args: &args::Args) -> std::io::Result<(SocketResource, String)> {
+    let transport = resolve_transport(args);
+    match transport {
+        args::Transport::Udp | args::Transport::Auto => build_udp_socket(args),
+        args::Transport::Unix => build_unix_socket(args),
+    }
+}
+
+fn build_udp_socket(args: &args::Args) -> std::io::Result<(SocketResource, String)> {
+    let socket = UdpSocket::bind(&args.udp_addr)?;
+    socket.set_nonblocking(true)?;
+    socket.set_read_timeout(Some(READ_TIMEOUT))?;
+    Ok((
+        SocketResource::Udp(socket),
+        format!("udp://{}", &args.udp_addr),
+    ))
+}
+
+#[cfg(unix)]
+fn build_unix_socket(args: &args::Args) -> std::io::Result<(SocketResource, String)> {
+    let path = args
+        .unix_path
+        .as_ref()
+        .map(PathBuf::from)
+        .unwrap_or_else(default_unix_path);
+
+    if path.exists() {
+        let _ = fs::remove_file(&path);
+    }
+
+    let listener = UnixListener::bind(&path)?;
+    listener.set_nonblocking(true)?;
+    Ok((
+        SocketResource::UnixStream {
+            listener,
+            stream: None,
+        },
+        format!("unix://{}", path.display()),
+    ))
+}
+
+#[cfg(not(unix))]
+fn build_unix_socket(_: &args::Args) -> std::io::Result<(SocketResource, String)> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Unix domain sockets are not supported on this platform",
+    ))
+}
+
+#[cfg(unix)]
+fn default_unix_path() -> PathBuf {
+    if let Ok(runtime_dir) = env::var("XDG_RUNTIME_DIR") {
+        return PathBuf::from(runtime_dir).join("pose-de-game.sock");
+    }
+    PathBuf::from("/tmp/pose-de-game.sock")
 }
