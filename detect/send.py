@@ -3,8 +3,8 @@ import socket
 import cbor2
 
 people_data = [
-    (
-        [
+    {
+        "keypoints": [
             [0.6020771861076355, 0.2547045350074768],
             [0.6209439039230347, 0.23340444266796112],
             [0.5800461769104004, 0.2330082505941391],
@@ -23,9 +23,10 @@ people_data = [
             None,
             None,
         ],
-        None,
-        None,
-    )
+        "right_hand_closed": None,
+        "left_hand_closed": None,
+        "person_png": None,
+    }
 ]
 
 cbor_data = cbor2.dumps(people_data)

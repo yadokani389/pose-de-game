@@ -7,6 +7,7 @@ use clap::Parser;
 
 mod args;
 mod breakout;
+mod debug;
 mod pose;
 
 const LISTEN_ADDRESS: &str = "127.0.0.1:45233";
@@ -41,6 +42,7 @@ fn main() {
             }),
             pose::PosePlugin,
             breakout::GamePlugin,
+            debug::DebugPlugin,
         ))
         .insert_resource(UdpSocketResource(socket))
         .insert_resource(args)
