@@ -9,24 +9,15 @@ use crate::{
     pose::PeopleDataRes,
 };
 
-pub struct PersonImagePlugin;
-
-impl Plugin for PersonImagePlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, create_image)
-            .add_systems(Update, (show_right_hand, show_person_image));
-    }
-}
-
 #[derive(Resource)]
-struct PersonImageHandle {
+pub(super) struct PersonImageHandle {
     handle: Handle<Image>,
 }
 
 #[derive(Component)]
-struct PersonImage;
+pub(super) struct PersonImage;
 
-fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+pub fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let extent = Extent3d {
         width: 1000,
         height: 1000,
@@ -57,7 +48,7 @@ fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     });
 }
 
-fn show_right_hand(people: Res<PeopleDataRes>, mut gizmos: Gizmos) {
+pub fn show_right_hand(people: Res<PeopleDataRes>, mut gizmos: Gizmos) {
     let Some(mut pos) = get_right_hand_pos(&people) else {
         return;
     };
@@ -74,7 +65,7 @@ fn get_right_hand_pos(people: &PeopleDataRes) -> Option<[f64; 2]> {
     *people.first()?.keypoints.get(10)?
 }
 
-fn show_person_image(
+pub fn show_person_image(
     people: Res<PeopleDataRes>,
     mut images: ResMut<Assets<Image>>,
     mut sprite: Single<&mut Sprite, With<PersonImage>>,

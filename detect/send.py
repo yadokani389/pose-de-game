@@ -4,6 +4,7 @@ import socket
 
 import cbor2
 
+
 def default_unix_path() -> str:
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
     if runtime_dir:
@@ -13,17 +14,27 @@ def default_unix_path() -> str:
 
 def resolve_transport(value: str) -> str:
     if value == "auto":
-        return "unix" if os.name == "posix" else "udp"
+        return "unix" if os.name == "posix" else "tcp"
     return value
+
+
+def connect_stream(transport: str, unix_path: str, tcp_addr: str) -> socket.socket:
+    if transport == "unix":
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(unix_path)
+        return sock
+
+    host, port_str = tcp_addr.rsplit(":", 1)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, int(port_str)))
+    return sock
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Send sample pose packet")
-    parser.add_argument(
-        "--transport", choices=["auto", "unix", "udp"], default="auto"
-    )
+    parser.add_argument("--transport", choices=["auto", "unix", "tcp"], default="auto")
     parser.add_argument("--unix-path", default=default_unix_path())
-    parser.add_argument("--udp-addr", default="127.0.0.1:45233")
+    parser.add_argument("--tcp-addr", default="127.0.0.1:45233")
     args = parser.parse_args()
 
     people_data = [
@@ -56,15 +67,9 @@ def main() -> None:
     cbor_data = cbor2.dumps(people_data)
     transport = resolve_transport(args.transport)
 
-    if transport == "unix":
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(args.unix_path)
-            length = len(cbor_data).to_bytes(4, "big")
-            sock.sendall(length + cbor_data)
-    else:
-        host, port_str = args.udp_addr.rsplit(":", 1)
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.sendto(cbor_data, (host, int(port_str)))
+    with connect_stream(transport, args.unix_path, args.tcp_addr) as sock:
+        length = len(cbor_data).to_bytes(4, "big")
+        sock.sendall(length + cbor_data)
 
 
 if __name__ == "__main__":

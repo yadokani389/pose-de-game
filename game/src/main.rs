@@ -1,6 +1,6 @@
 #![allow(clippy::type_complexity)]
 
-use std::{env, fs, net::UdpSocket, path::PathBuf, time::Duration};
+use std::{env, fs, net::TcpListener, net::TcpStream, path::PathBuf};
 
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -10,14 +10,14 @@ use clap::Parser;
 
 mod args;
 mod breakout;
-mod person_image;
 mod pose;
-
-const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Resource)]
 enum SocketResource {
-    Udp(UdpSocket),
+    Tcp {
+        listener: TcpListener,
+        stream: Option<TcpStream>,
+    },
     #[cfg(unix)]
     UnixStream {
         listener: UnixListener,
@@ -47,7 +47,6 @@ fn main() {
             }),
             pose::PosePlugin,
             breakout::GamePlugin,
-            person_image::PersonImagePlugin,
         ))
         .insert_resource(socket)
         .insert_resource(args)
@@ -60,7 +59,7 @@ fn resolve_transport(args: &args::Args) -> args::Transport {
             if cfg!(unix) {
                 args::Transport::Unix
             } else {
-                args::Transport::Udp
+                args::Transport::Tcp
             }
         }
         other => other,
@@ -70,18 +69,20 @@ fn resolve_transport(args: &args::Args) -> args::Transport {
 fn build_socket(args: &args::Args) -> std::io::Result<(SocketResource, String)> {
     let transport = resolve_transport(args);
     match transport {
-        args::Transport::Udp | args::Transport::Auto => build_udp_socket(args),
+        args::Transport::Tcp | args::Transport::Auto => build_tcp_socket(args),
         args::Transport::Unix => build_unix_socket(args),
     }
 }
 
-fn build_udp_socket(args: &args::Args) -> std::io::Result<(SocketResource, String)> {
-    let socket = UdpSocket::bind(&args.udp_addr)?;
-    socket.set_nonblocking(true)?;
-    socket.set_read_timeout(Some(READ_TIMEOUT))?;
+fn build_tcp_socket(args: &args::Args) -> std::io::Result<(SocketResource, String)> {
+    let listener = TcpListener::bind(&args.tcp_addr)?;
+    listener.set_nonblocking(true)?;
     Ok((
-        SocketResource::Udp(socket),
-        format!("udp://{}", &args.udp_addr),
+        SocketResource::Tcp {
+            listener,
+            stream: None,
+        },
+        format!("tcp://{}", &args.tcp_addr),
     ))
 }
 

@@ -5,7 +5,7 @@ use clap::Parser;
 pub enum Transport {
     Auto,
     Unix,
-    Udp,
+    Tcp,
 }
 
 #[derive(Parser, Resource, Debug, Clone)]
@@ -14,13 +14,13 @@ pub struct Args {
     pub synctest: bool,
     #[clap(short, long, default_value = "")]
     pub iroh: String,
-    /// Transport layer: auto uses Unix socket on Unix-like OS, otherwise UDP
+    /// Transport layer: auto uses Unix socket on Unix-like OS, otherwise TCP
     #[clap(long, value_enum, default_value_t = Transport::Auto)]
     pub transport: Transport,
     /// Unix domain socket path (fallback decided per-OS when not provided)
     #[clap(long)]
     pub unix_path: Option<String>,
-    /// UDP bind/receive address
+    /// TCP bind/receive address
     #[clap(long, default_value = "127.0.0.1:45233")]
-    pub udp_addr: String,
+    pub tcp_addr: String,
 }

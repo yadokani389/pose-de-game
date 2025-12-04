@@ -2,7 +2,6 @@ import argparse
 import io
 import os
 import socket
-from typing import Dict
 
 import cbor2
 import cv2
@@ -20,7 +19,7 @@ def default_unix_path() -> str:
 
 def resolve_transport(value: str) -> str:
     if value == "auto":
-        return "unix" if os.name == "posix" else "udp"
+        return "unix" if os.name == "posix" else "tcp"
     return value
 
 
@@ -47,9 +46,9 @@ def compute_iou(box_a: np.ndarray, box_b: np.ndarray) -> float:
     return inter_area / denom
 
 
-def match_boxes(pose_boxes: np.ndarray, seg_boxes: np.ndarray) -> Dict[int, int]:
+def match_boxes(pose_boxes: np.ndarray, seg_boxes: np.ndarray) -> dict[int, int]:
     """Match pose detections with segmentation masks using IoU."""
-    assignments: Dict[int, int] = {}
+    assignments: dict[int, int] = {}
     used = set()
 
     for pose_idx, pose_box in enumerate(pose_boxes):
@@ -82,28 +81,34 @@ def mask_to_png(image_bgr: np.ndarray, mask: np.ndarray) -> bytes:
     Image.fromarray(rgba).save(buf, format="PNG")
     return buf.getvalue()
 
-def send_packet(data: bytes, transport: str, unix_path: str, udp_addr: str) -> None:
+
+def connect_stream(transport: str, unix_path: str, tcp_addr: str) -> socket.socket:
     if transport == "unix":
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(unix_path)
-            length = len(data).to_bytes(4, "big")
-            sock.sendall(length + data)
-    else:
-        host, port_str = udp_addr.rsplit(":", 1)
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.sendto(data, (host, int(port_str)))
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(unix_path)
+        return sock
+
+    host, port_str = tcp_addr.rsplit(":", 1)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, int(port_str)))
+    return sock
+
+
+def send_packet(data: bytes, stream: socket.socket) -> None:
+    """Send length-prefixed payload over an established stream."""
+    length = len(data).to_bytes(4, "big")
+    stream.sendall(length + data)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pose detector sender")
-    parser.add_argument(
-        "--transport", choices=["auto", "unix", "udp"], default="auto"
-    )
+    parser.add_argument("--transport", choices=["auto", "unix", "tcp"], default="auto")
     parser.add_argument("--unix-path", default=default_unix_path())
-    parser.add_argument("--udp-addr", default="127.0.0.1:45233")
+    parser.add_argument("--tcp-addr", default="127.0.0.1:45233")
     args = parser.parse_args()
 
     transport = resolve_transport(args.transport)
+    stream = connect_stream(transport, args.unix_path, args.tcp_addr)
 
     pose = YOLO("./yolo11n-pose.pt")
     seg = YOLO("./yolo11n-seg.pt")
@@ -171,9 +176,11 @@ def main() -> None:
         people_data = []
         for i in range(len(xy)):
             body_keypoints = [
-                [float(xy[i, j, 0] / w), float(xy[i, j, 1] / h)]
-                if valid_mask[i, j]
-                else None
+                (
+                    [float(xy[i, j, 0] / w), float(xy[i, j, 1] / h)]
+                    if valid_mask[i, j]
+                    else None
+                )
                 for j in range(17)
             ]
 
@@ -194,7 +201,7 @@ def main() -> None:
         if people_data:
             try:
                 cbor_data = cbor2.dumps(people_data)
-                send_packet(cbor_data, transport, args.unix_path, args.udp_addr)
+                send_packet(cbor_data, stream)
             except Exception as e:
                 print(f"Error: {e}")
 
