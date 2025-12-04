@@ -9,9 +9,9 @@ use crate::{
     pose::PeopleDataRes,
 };
 
-pub struct DebugPlugin;
+pub struct PersonImagePlugin;
 
-impl Plugin for DebugPlugin {
+impl Plugin for PersonImagePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, create_image)
             .add_systems(Update, (show_right_hand, show_person_image));
@@ -19,12 +19,12 @@ impl Plugin for DebugPlugin {
 }
 
 #[derive(Resource)]
-struct PersonImageDebug {
+struct PersonImageHandle {
     handle: Handle<Image>,
 }
 
 #[derive(Component)]
-struct PersonImageDebugSprite;
+struct PersonImage;
 
 fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let extent = Extent3d {
@@ -49,10 +49,10 @@ fn create_image(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             ..default()
         },
         Transform::from_xyz(0., 0., 15.),
-        PersonImageDebugSprite,
+        PersonImage,
     ));
 
-    commands.insert_resource(PersonImageDebug {
+    commands.insert_resource(PersonImageHandle {
         handle: image_handle,
     });
 }
@@ -77,8 +77,8 @@ fn get_right_hand_pos(people: &PeopleDataRes) -> Option<[f64; 2]> {
 fn show_person_image(
     people: Res<PeopleDataRes>,
     mut images: ResMut<Assets<Image>>,
-    mut sprite: Single<&mut Sprite, With<PersonImageDebugSprite>>,
-    debug_image: Res<PersonImageDebug>,
+    mut sprite: Single<&mut Sprite, With<PersonImage>>,
+    debug_image: Res<PersonImageHandle>,
 ) {
     let Some(person) = people.first() else {
         return;
@@ -89,7 +89,7 @@ fn show_person_image(
     };
 
     if let Some(image) = images.get_mut(&debug_image.handle) {
-        let mut img = person_image.0.clone();
+        let mut img = person_image.clone();
         dim_alpha(&mut img);
         *image = img;
         let size = image.size_f32() / (image.width() as f32) * 2. * FIELD_WIDTH as f32 * CELL_SIZE;

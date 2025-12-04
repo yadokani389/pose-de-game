@@ -10,7 +10,7 @@ use clap::Parser;
 
 mod args;
 mod breakout;
-mod debug;
+mod person_image;
 mod pose;
 
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
@@ -47,7 +47,7 @@ fn main() {
             }),
             pose::PosePlugin,
             breakout::GamePlugin,
-            debug::DebugPlugin,
+            person_image::PersonImagePlugin,
         ))
         .insert_resource(socket)
         .insert_resource(args)

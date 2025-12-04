@@ -55,14 +55,11 @@ struct PersonPayload {
 }
 
 #[derive(Debug, Clone)]
-pub struct PersonImage(pub Image);
-
-#[derive(Debug, Clone)]
 pub struct PersonData {
     pub keypoints: Vec<Option<[f64; 2]>>,
     pub right_hand_closed: Option<bool>,
     pub left_hand_closed: Option<bool>,
-    pub person_image: Option<PersonImage>,
+    pub person_image: Option<Image>,
 }
 
 type PeoplePayload = Vec<PersonPayload>;
@@ -117,7 +114,7 @@ impl PersonPayload {
     }
 }
 
-fn decode_person_png(bytes: &[u8]) -> Result<PersonImage, TextureError> {
+fn decode_person_png(bytes: &[u8]) -> Result<Image, TextureError> {
     let image = Image::from_buffer(
         bytes,
         ImageType::Format(ImageFormat::Png),
@@ -127,7 +124,7 @@ fn decode_person_png(bytes: &[u8]) -> Result<PersonImage, TextureError> {
         RenderAssetUsages::default(),
     )?;
 
-    Ok(PersonImage(image))
+    Ok(image)
 }
 
 fn recv_message(
