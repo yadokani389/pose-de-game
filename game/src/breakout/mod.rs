@@ -5,8 +5,7 @@ use matchbox_socket::PeerId;
 
 mod ball;
 mod components;
-mod debug;
-mod field;
+pub mod field;
 mod item;
 mod menu;
 mod online;
@@ -23,7 +22,6 @@ impl Plugin for GamePlugin {
             GgrsPlugin::<Config>::default(),
             menu::MenuPlugin,
             ball::BallPlugin,
-            debug::DebugPlugin,
             field::FieldPlugin,
             paddle::PaddlePlugin,
             online::OnlinePlugin,
