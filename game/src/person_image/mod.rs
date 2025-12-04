@@ -80,6 +80,10 @@ fn show_person_image(
     mut sprite: Single<&mut Sprite, With<PersonImage>>,
     debug_image: Res<PersonImageHandle>,
 ) {
+    if !people.is_changed() {
+        return;
+    }
+
     let Some(person) = people.first() else {
         return;
     };
