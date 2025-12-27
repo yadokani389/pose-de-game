@@ -9,8 +9,18 @@ use bevy::prelude::*;
 use clap::Parser;
 
 mod args;
-mod breakout;
+mod assets;
+mod games;
+mod menu;
 mod pose;
+
+#[derive(States, Clone, Eq, PartialEq, Debug, Hash, Default)]
+#[states(scoped_entities)]
+pub enum AppState {
+    #[default]
+    MainMenu,
+    Breakout,
+}
 
 #[derive(Resource)]
 enum SocketResource {
@@ -46,8 +56,11 @@ fn main() {
                 ..default()
             }),
             pose::PosePlugin,
-            breakout::GamePlugin,
+            assets::EmbeddedAssetsPlugin,
+            menu::GameMenuPlugin,
+            games::breakout::GamePlugin,
         ))
+        .init_state::<AppState>()
         .insert_resource(socket)
         .insert_resource(args)
         .run();

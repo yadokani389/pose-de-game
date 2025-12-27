@@ -5,7 +5,7 @@ use bevy::{
 };
 
 use crate::{
-    breakout::field::{CELL_SIZE, FIELD_WIDTH},
+    games::breakout::field::{CELL_SIZE, FIELD_WIDTH},
     pose::PeopleDataRes,
 };
 
