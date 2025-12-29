@@ -125,6 +125,8 @@
                 ps.openvino
                 ps.onnx
               ]))
+              linuxHeaders
+              rustPlatform.bindgenHook
             ];
 
             LD_LIBRARY_PATH =
