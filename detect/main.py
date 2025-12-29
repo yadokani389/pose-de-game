@@ -105,13 +105,20 @@ def main() -> None:
     parser.add_argument("--transport", choices=["auto", "unix", "tcp"], default="auto")
     parser.add_argument("--unix-path", default=default_unix_path())
     parser.add_argument("--tcp-addr", default="127.0.0.1:45233")
+    parser.add_argument("--intel", action="store_true", help="Use OpenVINO models")
     args = parser.parse_args()
 
     transport = resolve_transport(args.transport)
     stream = connect_stream(transport, args.unix_path, args.tcp_addr)
 
-    pose = YOLO("./yolo11n-pose.pt")
-    seg = YOLO("./yolo11n-seg.pt")
+    if args.intel:
+        pose = YOLO("./yolo11n-pose_openvino_model/")
+        seg = YOLO("./yolo11n-seg_openvino_model/")
+        pose.predict(model="intel:gpu")
+        seg.predict(model="intel:gpu")
+    else:
+        pose = YOLO("./yolo11n-pose.pt")
+        seg = YOLO("./yolo11n-seg.pt")
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
