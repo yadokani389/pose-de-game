@@ -18,6 +18,7 @@ bevy-wasm-tasks = { git = "https://github.com/yadokani389/bevy-wasm-tasks", feat
 bevy_egui = "0.38"
 bevy_ggrs = "0.19"
 futures = "0.3.31"
+image = "0.25.9"
 iroh = { version = "0.35", default-features = false }
 iroh-gossip = { version = "0.35", default-features = false, features = ["net"] }
 matchbox_socket = { version = "0.13", features = ["ggrs"] }
@@ -25,5 +26,6 @@ n0-future = "0.1.3"
 nokhwa = { version = "0.10.10", features = ["input-native"] }
 serde_json = "1.0.140"
 tokio = "1.45.0"
+tract-onnx = "0.22.0"
 uuid = { version = "1.16.0", features = ["v4", "rng-getrandom"] }
 web-time = "1.1.0"
