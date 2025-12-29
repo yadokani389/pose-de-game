@@ -6,14 +6,23 @@ use visualize::*;
 mod receive;
 mod visualize;
 
+use crate::args::Args;
+
 pub struct PosePlugin;
 
 impl Plugin for PosePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(())
             .init_resource::<PeopleDataRes>()
-            .add_systems(Startup, create_image)
-            .add_systems(Update, (receive_data, show_right_hand, show_person_image));
+            .add_systems(Startup, create_image.run_if(show_person_enabled))
+            .add_systems(
+                Update,
+                (
+                    receive_data,
+                    show_right_hand,
+                    show_person_image.run_if(show_person_enabled),
+                ),
+            );
     }
 }
 
@@ -29,3 +38,7 @@ type PeopleData = Vec<PersonData>;
 
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct PeopleDataRes(PeopleData);
+
+fn show_person_enabled(args: Res<Args>) -> bool {
+    args.show_person
+}

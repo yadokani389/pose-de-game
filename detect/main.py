@@ -106,6 +106,11 @@ def main() -> None:
     parser.add_argument("--unix-path", default=default_unix_path())
     parser.add_argument("--tcp-addr", default="127.0.0.1:45233")
     parser.add_argument("--intel", action="store_true", help="Use OpenVINO models")
+    parser.add_argument(
+        "--send-person-png",
+        action="store_true",
+        help="Include per-person PNG masks in the payload (debug use).",
+    )
     args = parser.parse_args()
 
     transport = resolve_transport(args.transport)
@@ -113,12 +118,16 @@ def main() -> None:
 
     if args.intel:
         pose = YOLO("./yolo11n-pose_openvino_model/")
-        seg = YOLO("./yolo11n-seg_openvino_model/")
         pose.predict(model="intel:gpu")
-        seg.predict(model="intel:gpu")
+        if args.send_person_png:
+            seg = YOLO("./yolo11n-seg_openvino_model/")
+            seg.predict(model="intel:gpu")
+        else:
+            seg = None
     else:
         pose = YOLO("./yolo11n-pose.pt")
         seg = YOLO("./yolo11n-seg.pt")
+
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -129,7 +138,7 @@ def main() -> None:
             continue
 
         results = pose(image)[0]
-        seg_results = seg(image)[0]
+        seg_results = seg(image)[0] if seg is not None else None
 
         if results.keypoints is None:
             continue
@@ -158,27 +167,27 @@ def main() -> None:
             else np.zeros((len(xy), 4))
         )
 
-        seg_boxes = (
-            seg_results.boxes.xyxy.cpu().numpy()
-            if seg_results.boxes is not None
-            else np.zeros((0, 4))
-        )
-
+        seg_boxes = np.zeros((0, 4))
         segmentation_masks = []
-        if seg_results.masks is not None:
-            for mask in seg_results.masks.data.cpu().numpy():
-                resized = cv2.resize(
-                    mask,
-                    (w, h),
-                    interpolation=cv2.INTER_NEAREST,
-                )
-                segmentation_masks.append(resized > 0.5)
+        mask_assignments: dict[int, int] = {}
+        if seg_results is not None:
+            seg_boxes = (
+                seg_results.boxes.xyxy.cpu().numpy()
+                if seg_results.boxes is not None
+                else np.zeros((0, 4))
+            )
 
-        mask_assignments = (
-            match_boxes(pose_boxes, seg_boxes)
-            if len(segmentation_masks) == len(seg_boxes)
-            else {}
-        )
+            if seg_results.masks is not None:
+                for mask in seg_results.masks.data.cpu().numpy():
+                    resized = cv2.resize(
+                        mask,
+                        (w, h),
+                        interpolation=cv2.INTER_NEAREST,
+                    )
+                    segmentation_masks.append(resized > 0.5)
+
+            if len(segmentation_masks) == len(seg_boxes):
+                mask_assignments = match_boxes(pose_boxes, seg_boxes)
 
         people_data = []
         for i in range(len(xy)):
@@ -192,9 +201,10 @@ def main() -> None:
             ]
 
             png_bytes = None
-            seg_idx = mask_assignments.get(i)
-            if seg_idx is not None and seg_idx < len(segmentation_masks):
-                png_bytes = mask_to_png(image, segmentation_masks[seg_idx])
+            if args.send_person_png:
+                seg_idx = mask_assignments.get(i)
+                if seg_idx is not None and seg_idx < len(segmentation_masks):
+                    png_bytes = mask_to_png(image, segmentation_masks[seg_idx])
 
             people_data.append(
                 {

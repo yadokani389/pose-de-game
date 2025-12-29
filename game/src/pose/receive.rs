@@ -11,7 +11,7 @@ use bevy::{
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 
-use crate::SocketResource;
+use crate::{SocketResource, args::Args};
 
 use super::{PeopleData, PeopleDataRes, PersonData};
 
@@ -83,12 +83,29 @@ impl PersonPayload {
             person_image,
         }
     }
+
+    fn into_person_data_without_image(self) -> PersonData {
+        let PersonPayload {
+            keypoints,
+            right_hand_closed,
+            left_hand_closed,
+            person_png: _,
+        } = self;
+
+        PersonData {
+            keypoints,
+            right_hand_closed,
+            left_hand_closed,
+            person_image: None,
+        }
+    }
 }
 
 type PeoplePayload = Vec<PersonPayload>;
 
 pub fn receive_data(
     mut socket: ResMut<SocketResource>,
+    args: Res<Args>,
     mut people_data: ResMut<PeopleDataRes>,
     mut buffer: Local<SocketBuffer>,
     mut stream_state: Local<StreamState>,
@@ -99,11 +116,18 @@ pub fn receive_data(
 
     match serde_cbor::from_slice::<PeoplePayload>(&buffer[..size]) {
         Ok(people) => {
-            let converted: PeopleData = people
-                .into_iter()
-                .enumerate()
-                .map(|(idx, person)| person.into_person_data(idx))
-                .collect();
+            let converted: PeopleData = if args.show_person {
+                people
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, person)| person.into_person_data(idx))
+                    .collect()
+            } else {
+                people
+                    .into_iter()
+                    .map(PersonPayload::into_person_data_without_image)
+                    .collect()
+            };
 
             **people_data = converted;
         }

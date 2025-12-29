@@ -14,6 +14,9 @@ pub struct Args {
     pub synctest: bool,
     #[clap(short, long, default_value = "")]
     pub iroh: String,
+    /// Show the person overlay (debug use).
+    #[clap(long)]
+    pub show_person: bool,
     /// Transport layer: auto uses Unix socket on Unix-like OS, otherwise TCP
     #[clap(long, value_enum, default_value_t = Transport::Auto)]
     pub transport: Transport,
