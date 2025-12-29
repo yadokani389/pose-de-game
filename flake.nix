@@ -123,6 +123,7 @@
                 ps.opencv4
                 ps.cbor2
                 ps.openvino
+                ps.onnx
               ]))
             ];
 
