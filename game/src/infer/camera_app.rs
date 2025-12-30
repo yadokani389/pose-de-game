@@ -1,4 +1,4 @@
-use std::{sync::mpsc, thread, time::Duration};
+use std::{sync::mpsc, thread, time::Duration, time::Instant};
 
 use anyhow::Result;
 use bevy::asset::RenderAssetUsages;
@@ -8,7 +8,7 @@ use nokhwa::pixel_format::RgbAFormat;
 use nokhwa::utils::{ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::{Camera, nokhwa_initialize, query};
 
-use crate::infer::{BackendKind, InferenceOutput, PersonResult, PoseSegPipeline};
+use crate::infer::{BackendKind, InferenceOutput, InferenceTimings, PersonResult, PoseSegPipeline};
 
 const INFER_INTERVAL_SECONDS: f64 = 0.03;
 const KEYPOINT_SCORE_THRESHOLD: f32 = 0.1;
@@ -22,6 +22,7 @@ pub struct CameraAppConfig {
     pub seg_model: String,
     pub require_cuda: bool,
     pub enable_seg: bool,
+    pub enable_profile: bool,
 }
 
 struct FrameReceiver(mpsc::Receiver<FrameData>);
@@ -55,6 +56,19 @@ struct PoseDebug {
     last_seg_shape: Option<Vec<usize>>,
     last_proto_shape: Option<Vec<usize>>,
     people_count: usize,
+    profile: ProfileStats,
+}
+
+#[derive(Default)]
+struct ProfileStats {
+    enabled: bool,
+    sample_count: u32,
+    sum_preprocess_ms: f64,
+    sum_pose_ms: f64,
+    sum_seg_ms: f64,
+    sum_postprocess_ms: f64,
+    sum_texture_ms: f64,
+    sum_total_ms: f64,
 }
 
 pub fn run_camera_pose_app(config: CameraAppConfig) -> Result<()> {
@@ -76,11 +90,14 @@ pub fn run_camera_pose_app(config: CameraAppConfig) -> Result<()> {
         config.enable_seg,
     )?;
 
+    let mut debug = PoseDebug::default();
+    debug.profile.enabled = config.enable_profile;
+
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_non_send_resource(FrameReceiver(rx))
         .insert_non_send_resource(pipeline)
-        .insert_resource(PoseDebug::default())
+        .insert_resource(debug)
         .add_systems(Startup, setup)
         .add_systems(Update, apply_frame_and_infer)
         .add_systems(Update, draw_keypoints)
@@ -150,6 +167,13 @@ fn apply_frame_and_infer(
     };
 
     let frame_for_infer = frame.data.clone();
+    let profile_enabled = debug.profile.enabled;
+    let frame_timer = if profile_enabled {
+        Some(Instant::now())
+    } else {
+        None
+    };
+    let mut texture_ms = 0.0;
 
     let extent = Extent3d {
         width: frame.width,
@@ -157,13 +181,25 @@ fn apply_frame_and_infer(
         depth_or_array_layers: 1,
     };
 
-    update_texture(
-        &camera_image.0,
-        &mut images,
-        extent,
-        TextureFormat::Rgba8UnormSrgb,
-        frame.data,
-    );
+    if profile_enabled {
+        let tex_start = Instant::now();
+        update_texture(
+            &camera_image.0,
+            &mut images,
+            extent,
+            TextureFormat::Rgba8UnormSrgb,
+            frame.data,
+        );
+        texture_ms += tex_start.elapsed().as_secs_f64() * 1000.0;
+    } else {
+        update_texture(
+            &camera_image.0,
+            &mut images,
+            extent,
+            TextureFormat::Rgba8UnormSrgb,
+            frame.data,
+        );
+    }
 
     if let Ok(mut sprite) = camera_sprite.single_mut() {
         let size = Vec2::new(frame.width as f32, frame.height as f32);
@@ -184,20 +220,55 @@ fn apply_frame_and_infer(
     }
     debug.last_infer = now;
 
-    match pipeline.infer(frame.width, frame.height, frame_for_infer) {
+    let mut timings = InferenceTimings::default();
+    let output_result = if profile_enabled {
+        pipeline
+            .infer_profiled(frame.width, frame.height, frame_for_infer)
+            .map(|(output, timing)| {
+                timings = timing;
+                output
+            })
+    } else {
+        pipeline.infer(frame.width, frame.height, frame_for_infer)
+    };
+
+    match output_result {
         Ok(output) => {
             debug.last_pose_shape = Some(output.pose_output_shape.clone());
             debug.last_seg_shape = Some(output.seg_output_shape.clone());
             debug.last_proto_shape = Some(output.proto_shape.clone());
             debug.people_count = output.people.len();
             debug.keypoints_world = build_world_keypoints(&output);
-            debug.mask_rgba = build_mask_rgba(&output.people, output.frame_w, output.frame_h);
-            debug.mask_size = Some((output.frame_w, output.frame_h));
-            update_mask_texture(&mask_image.0, &mut images, &debug);
+            if pipeline.seg_enabled() {
+                debug.mask_rgba = build_mask_rgba(&output.people, output.frame_w, output.frame_h);
+                debug.mask_size = Some((output.frame_w, output.frame_h));
+                if profile_enabled {
+                    let tex_start = Instant::now();
+                    update_mask_texture(&mask_image.0, &mut images, &debug);
+                    texture_ms += tex_start.elapsed().as_secs_f64() * 1000.0;
+                } else {
+                    update_mask_texture(&mask_image.0, &mut images, &debug);
+                }
+            }
         }
         Err(err) => {
             eprintln!("inference error: {err}");
         }
+    }
+
+    if profile_enabled {
+        let total_ms = frame_timer
+            .expect("profile timer should be set")
+            .elapsed()
+            .as_secs_f64()
+            * 1000.0;
+        debug.profile.sample_count += 1;
+        debug.profile.sum_preprocess_ms += timings.preprocess_ms;
+        debug.profile.sum_pose_ms += timings.pose_infer_ms;
+        debug.profile.sum_seg_ms += timings.seg_infer_ms;
+        debug.profile.sum_postprocess_ms += timings.postprocess_ms;
+        debug.profile.sum_texture_ms += texture_ms;
+        debug.profile.sum_total_ms += total_ms;
     }
 
     if now - debug.last_log >= 1.0 {
@@ -213,6 +284,25 @@ fn apply_frame_and_infer(
             seg_shape,
             proto_shape
         );
+        if debug.profile.enabled && debug.profile.sample_count > 0 {
+            let denom = debug.profile.sample_count as f64;
+            println!(
+                "profile: pre={:.2} pose={:.2} seg={:.2} post={:.2} tex={:.2} total={:.2}",
+                debug.profile.sum_preprocess_ms / denom,
+                debug.profile.sum_pose_ms / denom,
+                debug.profile.sum_seg_ms / denom,
+                debug.profile.sum_postprocess_ms / denom,
+                debug.profile.sum_texture_ms / denom,
+                debug.profile.sum_total_ms / denom
+            );
+            debug.profile.sample_count = 0;
+            debug.profile.sum_preprocess_ms = 0.0;
+            debug.profile.sum_pose_ms = 0.0;
+            debug.profile.sum_seg_ms = 0.0;
+            debug.profile.sum_postprocess_ms = 0.0;
+            debug.profile.sum_texture_ms = 0.0;
+            debug.profile.sum_total_ms = 0.0;
+        }
     }
 }
 

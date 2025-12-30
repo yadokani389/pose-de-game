@@ -20,6 +20,8 @@ struct Args {
     require_cuda: bool,
     #[arg(long)]
     seg: bool,
+    #[arg(long)]
+    profile: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -50,6 +52,7 @@ fn main() {
         seg_model: args.seg_model,
         require_cuda: args.require_cuda,
         enable_seg: args.seg,
+        enable_profile: args.profile,
     };
 
     if let Err(err) = run_camera_pose_app(config) {

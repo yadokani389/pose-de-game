@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::time::Instant;
 
 mod backend_onnx;
 mod backend_openvino;
@@ -98,6 +99,14 @@ pub struct PoseSegPipeline {
     enable_seg: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InferenceTimings {
+    pub preprocess_ms: f64,
+    pub pose_infer_ms: f64,
+    pub seg_infer_ms: f64,
+    pub postprocess_ms: f64,
+}
+
 impl PoseSegPipeline {
     pub fn new(
         backend: BackendKind,
@@ -128,9 +137,34 @@ impl PoseSegPipeline {
     }
 
     pub fn infer(&mut self, frame_w: u32, frame_h: u32, rgba: Vec<u8>) -> Result<InferenceOutput> {
-        let input = preprocess::preprocess(frame_w, frame_h, rgba, self.backend.input_size())?;
+        let (output, _timings) = self.infer_profiled(frame_w, frame_h, rgba)?;
+        Ok(output)
+    }
 
+    pub fn infer_profiled(
+        &mut self,
+        frame_w: u32,
+        frame_h: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(InferenceOutput, InferenceTimings)> {
+        let preprocess_start = Instant::now();
+        let input = preprocess::preprocess(frame_w, frame_h, rgba, self.backend.input_size())?;
+        let preprocess_ms = preprocess_start.elapsed().as_secs_f64() * 1000.0;
+
+        let pose_start = Instant::now();
         let pose_raw = self.backend.infer_pose(&input)?;
+        let pose_infer_ms = pose_start.elapsed().as_secs_f64() * 1000.0;
+
+        let mut seg_infer_ms = 0.0;
+        let mut seg_raw_opt = None;
+        if self.enable_seg {
+            let seg_start = Instant::now();
+            let seg_raw = self.backend.infer_seg(&input)?;
+            seg_infer_ms = seg_start.elapsed().as_secs_f64() * 1000.0;
+            seg_raw_opt = Some(seg_raw);
+        }
+
+        let post_start = Instant::now();
         let pose_dets = decode_pose(
             &pose_raw,
             &input.letterbox,
@@ -139,8 +173,7 @@ impl PoseSegPipeline {
             KEYPOINT_MIN_COUNT,
         )?;
         let pose_dets = nms_pose(pose_dets, NMS_IOU_THRESHOLD);
-        let (people, seg_shape, proto_shape) = if self.enable_seg {
-            let seg_raw = self.backend.infer_seg(&input)?;
+        let (people, seg_shape, proto_shape) = if let Some(seg_raw) = seg_raw_opt {
             let seg_dets = decode_seg(
                 &seg_raw,
                 &input.letterbox,
@@ -166,15 +199,30 @@ impl PoseSegPipeline {
                 .collect();
             (people, Vec::new(), Vec::new())
         };
+        let postprocess_ms = post_start.elapsed().as_secs_f64() * 1000.0;
 
-        Ok(InferenceOutput {
+        let output = InferenceOutput {
             people,
             frame_w,
             frame_h,
             pose_output_shape: pose_raw.dims.clone(),
             seg_output_shape: seg_shape,
             proto_shape,
-        })
+        };
+
+        Ok((
+            output,
+            InferenceTimings {
+                preprocess_ms,
+                pose_infer_ms,
+                seg_infer_ms,
+                postprocess_ms,
+            },
+        ))
+    }
+
+    pub fn seg_enabled(&self) -> bool {
+        self.enable_seg
     }
 }
 
