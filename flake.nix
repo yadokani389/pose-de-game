@@ -127,6 +127,7 @@
               ]))
               linuxHeaders
               rustPlatform.bindgenHook
+              openvino
             ];
 
             LD_LIBRARY_PATH =
@@ -142,7 +143,10 @@
                 # for detect
                 libglvnd
                 glib
-              ];
+              ]
+              + ":${pkgs.openvino}/runtime/lib/intel64";
+
+            OPENVINO_INSTALL_DIR = pkgs.openvino;
           };
 
           treefmt = {
