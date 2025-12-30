@@ -106,6 +106,7 @@
           _module.args.pkgs = import nixpkgs {
             inherit system;
             overlays = [ inputs.rust-overlay.overlays.default ];
+            config.allowUnfree = true;
           };
 
           packages.default = pose-de-game;
@@ -128,6 +129,8 @@
               linuxHeaders
               rustPlatform.bindgenHook
               openvino
+              openssl
+              (onnxruntime.override { cudaSupport = true; })
             ];
 
             LD_LIBRARY_PATH =
@@ -143,6 +146,8 @@
                 # for detect
                 libglvnd
                 glib
+                (onnxruntime.override { cudaSupport = true; })
+                openssl
               ]
               + ":${pkgs.openvino}/runtime/lib/intel64";
 
