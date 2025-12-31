@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::time::Instant;
 
 mod backend_onnx;
+#[cfg(feature = "openvino")]
 mod backend_openvino;
 mod backend_ort;
 pub mod camera_app;
@@ -26,6 +27,7 @@ const IOU_THRESHOLD: f32 = 0.1;
 #[derive(Debug, Clone, Copy)]
 pub enum BackendKind {
     Onnx,
+    #[cfg(feature = "openvino")]
     OpenVino,
     Ort,
 }
@@ -119,6 +121,7 @@ impl PoseSegPipeline {
             BackendKind::Onnx => Box::new(backend_onnx::OnnxBackend::load(
                 pose_model, seg_model, INPUT_SIZE,
             )?),
+            #[cfg(feature = "openvino")]
             BackendKind::OpenVino => Box::new(backend_openvino::OpenVinoBackend::load(
                 pose_model, seg_model, INPUT_SIZE,
             )?),

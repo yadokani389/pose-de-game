@@ -27,6 +27,7 @@ struct Args {
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum BackendArg {
     Onnx,
+    #[cfg(feature = "openvino")]
     Openvino,
     Ort,
 }
@@ -35,6 +36,7 @@ impl From<BackendArg> for BackendKind {
     fn from(value: BackendArg) -> Self {
         match value {
             BackendArg::Onnx => BackendKind::Onnx,
+            #[cfg(feature = "openvino")]
             BackendArg::Openvino => BackendKind::OpenVino,
             BackendArg::Ort => BackendKind::Ort,
         }

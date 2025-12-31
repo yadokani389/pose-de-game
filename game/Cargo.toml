@@ -3,6 +3,10 @@ edition = "2024"
 name = "pose-de-game"
 version = "0.1.0"
 
+[features]
+default = []
+openvino = ["dep:openvino"]
+
 [dependencies]
 anyhow = "1.0.100"
 bevy = "0.17.3"
@@ -14,7 +18,7 @@ serde_cbor = "0.11.2"
 # detect
 image = "0.25.9"
 nokhwa = { version = "0.10.10", features = ["input-native"] }
-openvino = "0.9.1"
+openvino = { version = "0.9.1", optional = true }
 ort = { version = "2.0.0-rc.10", features = ["cuda"] }
 tract-onnx = "0.22.0"
 
