@@ -12,7 +12,7 @@
 ## データフロー概要
 
 1. カメラからフレーム取得
-2. Rust で姿勢推定（ONNX/ORT/OpenVINO）
+2. Rust で姿勢推定（tract/ort/OpenVINO）
 3. 推論結果を正規化してゲーム入力・描画に反映
 
 ## 実行方法
@@ -50,7 +50,7 @@ cargo run --release -- --backend ort --require-cuda
 - `--list-cameras`: カメラ一覧を表示
 - `--camera <index>`: 使用カメラ指定
 - `--pose-model <path>` / `--seg-model <path>`: モデルパス指定（未指定時は埋め込み）
-- `--backend <onnx|ort|openvino>`: 推論バックエンド
+- `--backend <tract|ort|openvino>`: 推論バックエンド
 - `--show-person`: 人物画像のデバッグ表示（セグメンテーション有効化）
 - `--profile`: 推論の平均時間をログ出力
 - `--require-cuda`: ORT の CUDA 必須指定

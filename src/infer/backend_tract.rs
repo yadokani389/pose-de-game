@@ -7,13 +7,13 @@ use std::io::Cursor;
 use crate::infer::preprocess::PreprocessedInput;
 use crate::infer::{ModelData, PoseSegBackend, RawOutput, SegRawOutput};
 
-pub(crate) struct OnnxBackend {
+pub(crate) struct TractBackend {
     pose_model: TypedRunnableModel<TypedModel>,
     seg_model: TypedRunnableModel<TypedModel>,
     input_size: u32,
 }
 
-impl OnnxBackend {
+impl TractBackend {
     pub(crate) fn load(pose: &ModelData, seg: &ModelData, input_size: u32) -> Result<Self> {
         let mut pose_reader = Cursor::new(pose.bytes());
         let pose_model = tract_onnx::onnx()
@@ -67,7 +67,7 @@ impl OnnxBackend {
     }
 }
 
-impl PoseSegBackend for OnnxBackend {
+impl PoseSegBackend for TractBackend {
     fn input_size(&self) -> u32 {
         self.input_size
     }

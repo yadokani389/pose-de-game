@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use std::{borrow::Cow, fs, path::Path, time::Instant};
 
-mod backend_onnx;
 #[cfg(feature = "openvino")]
 mod backend_openvino;
 mod backend_ort;
+mod backend_tract;
 mod postprocess;
 mod preprocess;
 
@@ -80,7 +80,7 @@ fn load_model_data(path: Option<&Path>, embedded: EmbeddedModel) -> Result<Model
 
 #[derive(Debug, Clone, Copy)]
 pub enum BackendKind {
-    Onnx,
+    Tract,
     #[cfg(feature = "openvino")]
     OpenVino,
     Ort,
@@ -175,7 +175,7 @@ impl PoseSegPipeline {
         let seg_data = load_model_data(seg_model, EMBEDDED_SEG_MODEL)?;
 
         let backend: Box<dyn PoseSegBackend> = match backend {
-            BackendKind::Onnx => Box::new(backend_onnx::OnnxBackend::load(
+            BackendKind::Tract => Box::new(backend_tract::TractBackend::load(
                 &pose_data, &seg_data, INPUT_SIZE,
             )?),
             #[cfg(feature = "openvino")]

@@ -7,7 +7,7 @@ use crate::infer::BackendKind;
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 pub enum BackendArg {
-    Onnx,
+    Tract,
     #[cfg(feature = "openvino")]
     Openvino,
     Ort,
@@ -16,7 +16,7 @@ pub enum BackendArg {
 impl From<BackendArg> for BackendKind {
     fn from(value: BackendArg) -> Self {
         match value {
-            BackendArg::Onnx => BackendKind::Onnx,
+            BackendArg::Tract => BackendKind::Tract,
             #[cfg(feature = "openvino")]
             BackendArg::Openvino => BackendKind::OpenVino,
             BackendArg::Ort => BackendKind::Ort,
@@ -41,7 +41,7 @@ pub struct Args {
     /// Segmentation model path (optional). Uses embedded model when omitted.
     #[arg(long)]
     pub seg_model: Option<PathBuf>,
-    #[arg(long, value_enum, default_value = "onnx")]
+    #[arg(long, value_enum, default_value = "tract")]
     pub backend: BackendArg,
     #[arg(long)]
     pub list_cameras: bool,
