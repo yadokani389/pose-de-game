@@ -44,102 +44,142 @@
           ...
         }:
         let
+          inherit (pkgs) lib;
           toolchain = pkgs.rust-bin.stable.latest.default;
           rustPlatform = pkgs.makeRustPlatform {
             cargo = toolchain;
             rustc = toolchain;
           };
-          pose-de-game = rustPlatform.buildRustPackage {
-            pname = "pose-de-game";
-            version = "0.1.0";
+          pose-de-game =
+            {
+              cudaSupport ? false,
+              openvinoSupport ? false,
+            }:
+            rustPlatform.buildRustPackage {
+              pname = "pose-de-game";
+              version = "0.1.0";
 
-            src = ./game;
+              src = ./.;
 
-            nativeBuildInputs = with pkgs; [
-              makeWrapper
-              pkg-config
-            ];
+              buildFeatures = lib.optional openvinoSupport "openvino";
 
-            buildInputs = with pkgs; [
-              zstd
-              libglvnd
-              alsa-lib
-              udev
-              vulkan-loader
-              wayland
-              xorg.libX11
-              xorg.libXcursor
-              xorg.libXi
-              xorg.libXrandr
-            ];
+              nativeBuildInputs = with pkgs; [
+                makeWrapper
+                pkg-config
+              ];
 
-            cargoDeps = rustPlatform.importCargoLock {
-              lockFile = ./game/Cargo.lock;
-              outputHashes = {
-                "bevy-wasm-tasks-0.16.0" = "sha256-8RBYwPmGiiXVkmIrV/n2UhIDEX8UzAwIUZV+PcSog5c=";
+              buildInputs =
+                with pkgs;
+                [
+                  zstd
+
+                  openssl
+                  rustPlatform.bindgenHook
+                  (onnxruntime.override { inherit cudaSupport; })
+                ]
+                ++ lib.optionals stdenv.hostPlatform.isLinux [
+                  alsa-lib
+                  libxkbcommon
+                  udev
+                  vulkan-loader
+                  wayland
+                  xorg.libX11
+                  xorg.libXcursor
+                  xorg.libXi
+                  xorg.libXrandr
+
+                ]
+                ++ lib.optional openvinoSupport [
+                  openvino
+                ];
+
+              OPENVINO_INSTALL_DIR = pkgs.lib.optionalString openvinoSupport "${pkgs.openvino}";
+
+              cargoDeps = rustPlatform.importCargoLock {
+                lockFile = ./Cargo.lock;
+                outputHashes = {
+                  "bevy-wasm-tasks-0.16.0" = "sha256-8RBYwPmGiiXVkmIrV/n2UhIDEX8UzAwIUZV+PcSog5c=";
+                };
+              };
+
+              postFixup =
+                with pkgs;
+                lib.optionalString stdenv.hostPlatform.isLinux ''
+                  patchelf $out/bin/pose-de-game \
+                    --add-rpath ${
+                      lib.makeLibraryPath [
+                        libxkbcommon
+                        vulkan-loader
+                      ]
+                    }
+                '';
+
+              meta = {
+                homepage = "https://github.com/yadokani389/pose-de-game";
+                license = with pkgs.lib.licenses; [
+                  asl20
+                  mit
+                ];
+                mainProgram = "pose-de-game";
               };
             };
 
-            postFixup =
-              with pkgs;
-              lib.optionalString stdenv.hostPlatform.isLinux ''
-                patchelf $out/bin/pose-de-game \
-                  --add-rpath ${
-                    lib.makeLibraryPath [
-                      libxkbcommon
-                      vulkan-loader
-                    ]
-                  }
-              '';
-
-            meta = {
-              homepage = "https://github.com/yadokani389/pose-de-game";
-              license = with pkgs.lib.licenses; [
-                asl20
-                mit
+          dev =
+            {
+              cudaSupport ? false,
+              openvinoSupport ? false,
+            }:
+            pkgs.mkShell {
+              inputsFrom = [
+                config.pre-commit.devShell
+                (pose-de-game { inherit cudaSupport openvinoSupport; })
               ];
-              mainProgram = "pose-de-game";
+
+              LD_LIBRARY_PATH =
+                with pkgs;
+                lib.optionalString stdenv.hostPlatform.isLinux (
+                  lib.makeLibraryPath [
+                    libxkbcommon
+                    vulkan-loader
+                    udev
+                    alsa-lib
+                    wayland
+
+                    # for detect
+                    openssl
+                    (onnxruntime.override { inherit cudaSupport; })
+                  ]
+                  + (lib.optionalString openvinoSupport ":${openvino}/runtime/lib/intel64")
+                );
+
+              OPENVINO_INSTALL_DIR = pkgs.lib.optionalString openvinoSupport "${pkgs.openvino}";
             };
-          };
         in
         {
           _module.args.pkgs = import nixpkgs {
             inherit system;
             overlays = [ inputs.rust-overlay.overlays.default ];
+            config.allowUnfree = true;
           };
 
-          packages.default = pose-de-game;
+          packages = {
+            default = pose-de-game { };
+            cuda = pose-de-game { cudaSupport = true; };
+            openvino = pose-de-game { openvinoSupport = true; };
+            full = pose-de-game {
+              cudaSupport = true;
+              openvinoSupport = true;
+            };
+          };
 
-          devShells.default = pkgs.mkShell {
-            inputsFrom = [
-              config.pre-commit.devShell
-              pose-de-game
-            ];
-
-            packages = with pkgs; [
-              vulkan-headers
-              (pkgs.python313.withPackages (ps: [
-                ps.ultralytics
-                ps.opencv4
-                ps.cbor2
-                ps.openvino
-              ]))
-            ];
-
-            LD_LIBRARY_PATH =
-              with pkgs;
-              lib.makeLibraryPath [
-                libxkbcommon
-                vulkan-loader
-                udev
-                alsa-lib
-                kdePackages.wayland
-                stdenv.cc.cc.lib
-
-                # for detect
-                libglvnd
-                glib
-              ];
+          devShells = {
+            default = dev { };
+            cuda = dev { cudaSupport = true; };
+            openvino = dev { openvinoSupport = true; };
+            full = dev {
+              cudaSupport = true;
+              openvinoSupport = true;
+            };
           };
 
           treefmt = {
@@ -159,22 +199,29 @@
             };
           };
 
-          pre-commit = {
-            check.enable = true;
-            settings = {
-              hooks = {
-                ripsecrets.enable = true;
-                typos.enable = true;
-                treefmt.enable = true;
-                clippy = {
-                  enable = true;
-                  packageOverrides.cargo = toolchain;
-                  packageOverrides.clippy = toolchain;
-                  settings.extraArgs = "--manifest-path game/Cargo.toml --all-targets";
-                };
+          pre-commit.settings = {
+            hooks = {
+              ripsecrets.enable = true;
+              typos.enable = true;
+              treefmt.enable = true;
+              clippy = {
+                enable = true;
+                packageOverrides.cargo = toolchain;
+                packageOverrides.clippy = toolchain;
               };
             };
           };
         };
     };
+
+  nixConfig = {
+    extra-substituters = [
+      "https://yadokani389.cachix.org"
+      "https://nix-community.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "yadokani389.cachix.org-1:xHw9jijQFNDKlNprHbQpXX6cVOUO4m/n2lBfx6Bq4jg="
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+    ];
+  };
 }

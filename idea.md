@@ -1,6 +1,4 @@
 体を使ったゲーム
-detect/ 検出
-game/ udpで受け取る
 
 keypoints
 0   Nose
