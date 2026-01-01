@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{AppState, assets::UiFont};
+use crate::{AppState, assets::UiFont, pose::disable_pose_runtime};
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.18);
 const HOVERED_BUTTON: Color = Color::srgb(0.22, 0.22, 0.26);
@@ -12,8 +12,11 @@ pub struct GameMenuPlugin;
 
 impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::MainMenu), setup_menu)
-            .add_systems(Update, button_system.run_if(in_state(AppState::MainMenu)));
+        app.add_systems(
+            OnEnter(AppState::MainMenu),
+            (disable_pose_runtime, setup_menu),
+        )
+        .add_systems(Update, button_system.run_if(in_state(AppState::MainMenu)));
     }
 }
 

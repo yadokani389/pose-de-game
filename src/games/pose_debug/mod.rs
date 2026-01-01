@@ -5,7 +5,7 @@ use bevy::{
 };
 
 use crate::AppState;
-use crate::pose::{LatestFrameRes, PeopleDataRes};
+use crate::pose::{LatestFrameRes, PeopleDataRes, disable_pose_runtime, enable_pose_runtime};
 
 const KEYPOINT_RADIUS: f32 = 6.0;
 const KEYPOINT_COLOR: Color = Color::srgb(0.2, 1.0, 0.2);
@@ -16,7 +16,8 @@ pub struct PoseDebugPlugin;
 
 impl Plugin for PoseDebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::PoseDebug), setup)
+        app.add_systems(OnEnter(AppState::PoseDebug), (enable_pose_runtime, setup))
+            .add_systems(OnExit(AppState::PoseDebug), disable_pose_runtime)
             .add_systems(
                 Update,
                 (update_camera_view, draw_keypoints, update_mask_overlay)

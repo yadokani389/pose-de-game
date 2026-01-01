@@ -4,7 +4,10 @@ use bevy_ggrs::prelude::*;
 use components::Team;
 use matchbox_socket::PeerId;
 
-use crate::AppState;
+use crate::{
+    AppState,
+    pose::{disable_pose_runtime, enable_pose_runtime},
+};
 
 mod ball;
 mod components;
@@ -34,6 +37,8 @@ impl Plugin for GamePlugin {
         ))
         .init_state::<GameState>()
         .add_systems(OnEnter(AppState::Breakout), enter_breakout)
+        .add_systems(OnEnter(AppState::Breakout), disable_pose_runtime)
+        .add_systems(OnExit(AppState::Breakout), disable_pose_runtime)
         .add_systems(OnEnter(AppState::Breakout), setup_graphics)
         .add_systems(
             OnEnter(AppState::Breakout),
@@ -52,6 +57,14 @@ impl Plugin for GamePlugin {
             despawn_out_of_bounds_entities
                 .after(field::toggle_cell)
                 .run_if(in_state(AppState::Breakout)),
+        )
+        .add_systems(
+            OnEnter(GameState::InGame),
+            enable_pose_runtime.run_if(in_state(AppState::Breakout)),
+        )
+        .add_systems(
+            OnExit(GameState::InGame),
+            disable_pose_runtime.run_if(in_state(AppState::Breakout)),
         )
         .rollback_component_with_clone::<Transform>()
         .rollback_component_with_copy::<Team>();
