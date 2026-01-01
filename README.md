@@ -1,61 +1,60 @@
 # pose-de-game
 
-体の動きで操作するゲームのプロジェクトです。`detect/` がカメラ入力から姿勢推定を行い、`game/` が受信した姿勢情報でゲームを動かします。送受信はローカルの TCP または Unix domain socket を使用します。
+体の動きで操作するゲームのプロジェクトです。Rust だけでカメラ入力から姿勢推定まで行い、推論結果でゲームを動かします。
 
 ## 構成
-- `detect/`: Python で姿勢推定（YOLO）を行い、姿勢情報を CBOR で送信
-- `game/`: Rust + Bevy のゲーム本体。受信した姿勢情報で操作
+
+- `src/infer/`: 姿勢推論パイプライン（前処理/推論/後処理）
+- `src/pose/runtime/`: カメラ取得・推論実行・ゲーム用データ変換
+- `src/pose/visualize.rs`: デバッグ表示（人物画像/手の位置）
+- `src/games/`: ゲーム本体（Bevy）
 
 ## データフロー概要
-1. `detect` がカメラからフレーム取得
-2. 姿勢推定結果を正規化して CBOR でシリアライズ
-3. ソケット経由で `game` に送信
-4. `game` が受信し、入力や描画に反映
+
+1. カメラからフレーム取得
+2. Rust で姿勢推定（ONNX/ORT/OpenVINO）
+3. 推論結果を正規化してゲーム入力・描画に反映
 
 ## 実行方法
-### 1) ゲーム側（受信）
+
 ```bash
-cd game
 cargo run --release
 ```
 
-デバッグ用に人物表示を行う場合:
+デバッグ用に人物表示を行う場合（セグメンテーションも有効化）:
+
 ```bash
-cd game
 cargo run --release -- --show-person
 ```
 
-### 2) 検出側（送信）
-```bash
-cd detect
-python main.py
-```
-
-uv を使う場合:
-```bash
-cd detect
-uv run python main.py
-```
-
-デバッグ用に人物 PNG を送信する場合:
-```bash
-cd detect
-python main.py --send-person-png
-```
-
-## 送受信の設定
-両方とも `--transport` で `tcp` / `unix` を指定できます。未指定時は OS に応じて自動選択されます。
-
-例（TCPで接続する場合）:
-```bash
-cd game
-cargo run --release -- --transport tcp --tcp-addr 127.0.0.1:45233
-```
+利用可能なカメラ一覧:
 
 ```bash
-cd detect
-python main.py --transport tcp --tcp-addr 127.0.0.1:45233
+cargo run --release -- --list-cameras
 ```
+
+モデルパスを明示する場合（未指定なら `assets/models` の埋め込みモデルを使用）:
+
+```bash
+cargo run --release -- --pose-model path/to/yolo11n-pose.onnx --seg-model path/to/yolo11n-seg.onnx
+```
+
+バックエンド指定例（`openvino` は feature 有効時のみ）:
+
+```bash
+cargo run --release -- --backend ort --require-cuda
+```
+
+## 主なオプション
+
+- `--list-cameras`: カメラ一覧を表示
+- `--camera <index>`: 使用カメラ指定
+- `--pose-model <path>` / `--seg-model <path>`: モデルパス指定（未指定時は埋め込み）
+- `--backend <onnx|ort|openvino>`: 推論バックエンド
+- `--show-person`: 人物画像のデバッグ表示（セグメンテーション有効化）
+- `--profile`: 推論の平均時間をログ出力
+- `--require-cuda`: ORT の CUDA 必須指定
 
 ## ライセンス
+
 MIT / Apache-2.0

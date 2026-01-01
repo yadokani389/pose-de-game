@@ -59,7 +59,7 @@
               pname = "pose-de-game";
               version = "0.1.0";
 
-              src = ./game;
+              src = ./.;
 
               buildFeatures = lib.optional openvinoSupport "openvino";
 
@@ -96,7 +96,7 @@
               OPENVINO_INSTALL_DIR = pkgs.lib.optionalString openvinoSupport "${pkgs.openvino}";
 
               cargoDeps = rustPlatform.importCargoLock {
-                lockFile = ./game/Cargo.lock;
+                lockFile = ./Cargo.lock;
                 outputHashes = {
                   "bevy-wasm-tasks-0.16.0" = "sha256-8RBYwPmGiiXVkmIrV/n2UhIDEX8UzAwIUZV+PcSog5c=";
                 };
@@ -123,6 +123,7 @@
                 mainProgram = "pose-de-game";
               };
             };
+
           dev =
             {
               cudaSupport ? false,
@@ -198,19 +199,15 @@
             };
           };
 
-          pre-commit = {
-            check.enable = true;
-            settings = {
-              hooks = {
-                ripsecrets.enable = true;
-                typos.enable = true;
-                treefmt.enable = true;
-                clippy = {
-                  enable = true;
-                  packageOverrides.cargo = toolchain;
-                  packageOverrides.clippy = toolchain;
-                  settings.extraArgs = "--manifest-path game/Cargo.toml --all-targets";
-                };
+          pre-commit.settings = {
+            hooks = {
+              ripsecrets.enable = true;
+              typos.enable = true;
+              treefmt.enable = true;
+              clippy = {
+                enable = true;
+                packageOverrides.cargo = toolchain;
+                packageOverrides.clippy = toolchain;
               };
             };
           };
