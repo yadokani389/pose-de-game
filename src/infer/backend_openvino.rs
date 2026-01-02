@@ -51,7 +51,7 @@ impl OpenVinoBackend {
             output_names.push(output_port.get_name()?);
         }
 
-        let mut compiled = core.compile_model(&model, DeviceType::CPU)?;
+        let mut compiled = core.compile_model(&model, DeviceType::Other("AUTO".into()))?;
         let mut infer_request = compiled.create_infer_request()?;
         let input_shape = Shape::new(&[1, 3, input_size as i64, input_size as i64])?;
         let input_tensor = Tensor::new(ElementType::F32, &input_shape)?;

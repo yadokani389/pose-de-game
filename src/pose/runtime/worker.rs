@@ -86,10 +86,10 @@ impl WorkerState {
 
     fn should_infer(&mut self) -> bool {
         let now = Instant::now();
-        if let Some(last) = self.last_infer {
-            if now.duration_since(last) < INFER_INTERVAL {
-                return false;
-            }
+        if let Some(last) = self.last_infer
+            && now.duration_since(last) < INFER_INTERVAL
+        {
+            return false;
         }
         self.last_infer = Some(now);
         true
@@ -122,12 +122,7 @@ fn run_worker(
 
     let mut state = WorkerState::new();
 
-    loop {
-        let request = match request_rx.recv() {
-            Ok(request) => request,
-            Err(_) => break,
-        };
-
+    while let Ok(request) = request_rx.recv() {
         if !state.should_infer() {
             continue;
         }

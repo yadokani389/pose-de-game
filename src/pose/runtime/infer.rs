@@ -34,14 +34,12 @@ pub(super) fn infer_from_camera(
         **people_data =
             build_people_data(&response.output, frame_rgba.as_deref(), args.show_person);
 
-        if debug_active {
-            if let Some(rgba) = frame_rgba.take() {
-                latest_frame.frame = Some(FrameImage {
-                    width: response.output.frame_w,
-                    height: response.output.frame_h,
-                    data: rgba,
-                });
-            }
+        if debug_active && let Some(rgba) = frame_rgba.take() {
+            latest_frame.frame = Some(FrameImage {
+                width: response.output.frame_w,
+                height: response.output.frame_h,
+                data: rgba,
+            });
         }
     }
 }

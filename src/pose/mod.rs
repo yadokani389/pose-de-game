@@ -11,8 +11,7 @@ pub struct PosePlugin;
 
 impl Plugin for PosePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(())
-            .init_resource::<PoseRuntimeControl>()
+        app.init_resource::<PoseRuntimeControl>()
             .init_resource::<PeopleDataRes>()
             .init_resource::<LatestFrameRes>()
             .add_systems(Update, infer_from_camera.run_if(pose_runtime_enabled));
