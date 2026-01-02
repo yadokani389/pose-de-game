@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use image::{DynamicImage, RgbImage};
+use fast_image_resize::images::{Image, ImageRef};
+use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
 
 pub(crate) struct PreprocessedInput {
     pub(crate) data: Vec<f32>,
@@ -24,34 +25,37 @@ pub(crate) fn preprocess(
     rgba: Vec<u8>,
     input_size: u32,
 ) -> Result<PreprocessedInput> {
-    let rgba_image =
-        image::RgbaImage::from_raw(frame_w, frame_h, rgba).context("failed to build RGBA image")?;
-    let rgb_image = DynamicImage::ImageRgba8(rgba_image).to_rgb8();
-
     let scale = input_size as f32 / frame_w.max(frame_h) as f32;
     let new_w = (frame_w as f32 * scale).round().max(1.0) as u32;
     let new_h = (frame_h as f32 * scale).round().max(1.0) as u32;
-    let resized = image::imageops::resize(
-        &rgb_image,
-        new_w,
-        new_h,
-        image::imageops::FilterType::Triangle,
-    );
-
-    let mut padded = RgbImage::new(input_size, input_size);
     let pad_x = (input_size - new_w) / 2;
     let pad_y = (input_size - new_h) / 2;
-    image::imageops::replace(&mut padded, &resized, pad_x as i64, pad_y as i64);
+
+    let src_image = ImageRef::new(frame_w, frame_h, &rgba, PixelType::U8x4)
+        .context("failed to build resize input image")?;
+    let mut resized = Image::new(new_w, new_h, PixelType::U8x4);
+    let mut resizer = Resizer::new();
+    let options = ResizeOptions::new()
+        .resize_alg(ResizeAlg::Convolution(FilterType::Bilinear))
+        .use_alpha(false);
+    resizer
+        .resize(&src_image, &mut resized, Some(&options))
+        .context("failed to resize input image")?;
 
     let mut data = vec![0.0f32; (input_size * input_size * 3) as usize];
     let stride = (input_size * input_size) as usize;
-    for y in 0..input_size {
-        for x in 0..input_size {
-            let pixel = padded.get_pixel(x, y);
-            let idx = (y * input_size + x) as usize;
-            data[idx] = pixel[0] as f32 / 255.0;
-            data[stride + idx] = pixel[1] as f32 / 255.0;
-            data[stride * 2 + idx] = pixel[2] as f32 / 255.0;
+    let resized_buf = resized.buffer();
+    let dst_row_stride = input_size as usize;
+    let src_row_stride = new_w as usize;
+    for y in 0..new_h {
+        let dst_row = (y + pad_y) as usize * dst_row_stride;
+        let src_row = y as usize * src_row_stride;
+        for x in 0..new_w {
+            let dst_idx = dst_row + (x + pad_x) as usize;
+            let src_idx = (src_row + x as usize) * 4;
+            data[dst_idx] = resized_buf[src_idx] as f32 / 255.0;
+            data[stride + dst_idx] = resized_buf[src_idx + 1] as f32 / 255.0;
+            data[stride * 2 + dst_idx] = resized_buf[src_idx + 2] as f32 / 255.0;
         }
     }
 

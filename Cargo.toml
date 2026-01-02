@@ -16,6 +16,7 @@ serde_bytes = "0.11"
 serde_cbor = "0.11.2"
 
 # detect
+fast_image_resize = "5.4.0"
 image = "0.25.9"
 nokhwa = { version = "0.10.10", features = ["input-native"] }
 openvino = { version = "0.9.1", optional = true }
