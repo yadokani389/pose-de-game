@@ -280,10 +280,6 @@ impl PoseSegPipeline {
             },
         ))
     }
-
-    pub fn seg_enabled(&self) -> bool {
-        self.enable_seg
-    }
 }
 
 fn match_people(

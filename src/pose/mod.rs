@@ -30,6 +30,7 @@ pub fn list_cameras() {
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct PoseRuntimeControl {
     pub enabled: bool,
+    pub generation: u64,
 }
 
 pub fn pose_runtime_enabled(control: Res<PoseRuntimeControl>) -> bool {
@@ -38,6 +39,7 @@ pub fn pose_runtime_enabled(control: Res<PoseRuntimeControl>) -> bool {
 
 pub fn enable_pose_runtime(mut control: ResMut<PoseRuntimeControl>) {
     control.enabled = true;
+    control.generation = control.generation.wrapping_add(1);
 }
 
 pub fn disable_pose_runtime(

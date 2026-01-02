@@ -20,7 +20,12 @@ impl Plugin for PoseDebugPlugin {
             .add_systems(OnExit(AppState::PoseDebug), disable_pose_runtime)
             .add_systems(
                 Update,
-                (update_camera_view, draw_keypoints, update_mask_overlay)
+                (
+                    handle_escape_to_menu,
+                    update_camera_view,
+                    draw_keypoints,
+                    update_mask_overlay,
+                )
                     .run_if(in_state(AppState::PoseDebug)),
             );
     }
@@ -37,6 +42,15 @@ struct MaskImageHandle(Handle<Image>);
 
 #[derive(Component)]
 struct MaskSprite;
+
+fn handle_escape_to_menu(
+    input: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if input.just_pressed(KeyCode::Escape) {
+        next_state.set(AppState::MainMenu);
+    }
+}
 
 fn setup(
     mut commands: Commands,
