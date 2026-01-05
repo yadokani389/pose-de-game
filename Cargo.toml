@@ -23,6 +23,9 @@ openvino = { version = "0.9.1", optional = true }
 ort = { version = "2.0.0-rc.10", features = ["cuda"] }
 tract-onnx = "0.22.0"
 
+# menu
+bevy_flair = "0.6.0"
+
 # game
 async-broadcast = "0.7.2"
 bevy-wasm-tasks = { git = "https://github.com/yadokani389/bevy-wasm-tasks", features = [

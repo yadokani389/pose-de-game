@@ -1,0 +1,165 @@
+@font-face {
+    font-family: "Noto Sans Mono CJK";
+    src: url("fonts/NotoSansMonoCJK-VF.otf.ttc");
+}
+
+:root {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 64px 84px 52px;
+    gap: 36px;
+
+    font-family: "Noto Sans Mono CJK";
+    color: #e6edf3;
+    background: linear-gradient(135deg, #0a0f17 0%, #0f1826 52%, #0c1b26 100%);
+}
+
+.menu-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.menu-title {
+    font-size: 64px;
+    color: #f7f3ea;
+}
+
+.menu-subtitle {
+    font-size: 18px;
+    color: #a3b1c0;
+}
+
+.menu-divider {
+    width: 100%;
+    height: 3px;
+    margin-top: 10px;
+    background: linear-gradient(90deg, rgba(255, 203, 102, 0.95), rgba(255, 255, 255, 0));
+}
+
+.menu-grid {
+    display: grid;
+    flex-grow: 1;
+    grid: auto / repeat(3, 1fr);
+    gap: 22px;
+    align-content: start;
+}
+
+.game-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 22px 24px;
+    min-height: 190px;
+    border-radius: 22px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.12);
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03));
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4);
+
+    transition: background 0.25s, border-color 0.25s, scale 0.25s;
+    scale: 1.0;
+}
+
+.game-card:hover {
+    border-color: rgba(120, 205, 255, 0.9);
+    background: linear-gradient(145deg, rgba(120, 205, 255, 0.26), rgba(255, 255, 255, 0.04));
+    scale: 1.03;
+}
+
+.game-card.is-selected {
+    border-color: rgba(255, 203, 102, 0.95);
+    background: linear-gradient(145deg, rgba(255, 203, 102, 0.28), rgba(255, 255, 255, 0.06));
+    box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.52),
+        0 0 22px rgba(255, 203, 102, 0.35);
+    scale: 1.05;
+}
+
+.game-card.is-disabled {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+}
+
+.game-card.is-disabled:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    scale: 1.0;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 14px;
+}
+
+.card-title {
+    font-size: 28px;
+    color: #f3f7fb;
+}
+
+.card-badge {
+    font-size: 13px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #d1dde8;
+}
+
+.card-summary {
+    font-size: 15px;
+    color: #b0bccb;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.card-status {
+    font-size: 13px;
+    color: #99aec3;
+}
+
+.game-card.is-selected .card-title {
+    color: #fff4de;
+}
+
+.game-card.is-selected .card-summary {
+    color: #f3e8d0;
+}
+
+.game-card.is-selected .card-badge {
+    background-color: rgba(255, 203, 102, 0.95);
+    border-color: rgba(255, 203, 102, 0.95);
+    color: #1c1407;
+}
+
+.game-card.is-disabled .card-title,
+.game-card.is-disabled .card-summary,
+.game-card.is-disabled .card-status {
+    color: #6f7b8c;
+}
+
+.game-card.is-disabled .card-badge {
+    border-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #7f8a99;
+}
+
+.menu-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.menu-hint {
+    font-size: 15px;
+    color: #9aacbd;
+}

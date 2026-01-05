@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 
 use bevy::prelude::*;
+use bevy_flair::prelude::FlairPlugin;
 use clap::Parser;
 
 mod args;
@@ -41,6 +42,7 @@ fn main() {
             }),
             ..default()
         }),
+        FlairPlugin,
         pose::PosePlugin,
         assets::EmbeddedAssetsPlugin,
         menu::GameMenuPlugin,
