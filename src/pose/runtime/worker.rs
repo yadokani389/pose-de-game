@@ -15,7 +15,7 @@ const PROFILE_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(super) struct InferRequest {
     pub(super) frame: FrameData,
-    pub(super) debug_active: bool,
+    pub(super) capture_frame: bool,
     pub(super) generation: u64,
 }
 
@@ -127,7 +127,7 @@ fn run_worker(
             continue;
         }
 
-        let needs_rgba = args.show_person || request.debug_active;
+        let needs_rgba = args.show_person || request.capture_frame;
         let mut frame_rgba = None;
         let frame_for_infer = if needs_rgba {
             let data = request.frame.data;

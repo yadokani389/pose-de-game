@@ -52,6 +52,7 @@ cargo run --release -- --backend ort --require-cuda
 - `--pose-model <path>` / `--seg-model <path>`: モデルパス指定（未指定時は埋め込み）
 - `--backend <tract|ort|openvino>`: 推論バックエンド
 - `--show-person`: 人物画像のデバッグ表示（セグメンテーション有効化）
+- `--mirror-camera`: カメラ映像を左右反転して推論
 - `--profile`: 推論の平均時間をログ出力
 - `--require-cuda`: ORT の CUDA 必須指定
 

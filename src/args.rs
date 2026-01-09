@@ -33,6 +33,9 @@ pub struct Args {
     /// Show the person overlay (debug use). Enables segmentation.
     #[clap(long)]
     pub show_person: bool,
+    /// Mirror camera image horizontally before inference.
+    #[arg(long)]
+    pub mirror_camera: bool,
     #[arg(long, default_value_t = 0)]
     pub camera: u32,
     /// Pose model path (optional). Uses embedded model when omitted.

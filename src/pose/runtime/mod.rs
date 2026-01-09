@@ -10,25 +10,25 @@ mod map;
 mod profile;
 mod worker;
 
-use super::{LatestFrameRes, PeopleDataRes};
+use super::{LatestFrameRes, PeopleDataRes, PoseRuntimeSettings};
 use worker::InferWorker;
 
 pub(super) fn infer_from_camera(
     receiver: NonSend<camera::FrameReceiver>,
     worker: NonSend<InferWorker>,
     args: Res<Args>,
+    settings: Res<PoseRuntimeSettings>,
     people_data: ResMut<PeopleDataRes>,
     latest_frame: ResMut<LatestFrameRes>,
-    app_state: Res<State<crate::AppState>>,
     control: Res<crate::pose::PoseRuntimeControl>,
 ) {
     infer::infer_from_camera(
         receiver,
         worker,
         args,
+        settings,
         people_data,
         latest_frame,
-        app_state,
         control,
     );
 }

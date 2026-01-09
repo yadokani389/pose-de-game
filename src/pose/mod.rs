@@ -12,6 +12,7 @@ pub struct PosePlugin;
 impl Plugin for PosePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PoseRuntimeControl>()
+            .init_resource::<PoseRuntimeSettings>()
             .init_resource::<PeopleDataRes>()
             .init_resource::<LatestFrameRes>()
             .add_systems(Update, infer_from_camera.run_if(pose_runtime_enabled));
@@ -49,6 +50,19 @@ pub fn disable_pose_runtime(
     control.enabled = false;
     people.clear();
     latest_frame.frame = None;
+}
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct PoseRuntimeSettings {
+    pub capture_frame: bool,
+}
+
+pub fn enable_pose_frame_capture(mut settings: ResMut<PoseRuntimeSettings>) {
+    settings.capture_frame = true;
+}
+
+pub fn disable_pose_frame_capture(mut settings: ResMut<PoseRuntimeSettings>) {
+    settings.capture_frame = false;
 }
 
 #[derive(Debug, Clone)]

@@ -5,7 +5,10 @@ use bevy::{
 };
 
 use crate::AppState;
-use crate::pose::{LatestFrameRes, PeopleDataRes, disable_pose_runtime, enable_pose_runtime};
+use crate::pose::{
+    LatestFrameRes, PeopleDataRes, disable_pose_frame_capture, disable_pose_runtime,
+    enable_pose_frame_capture, enable_pose_runtime,
+};
 
 const KEYPOINT_RADIUS: f32 = 6.0;
 const KEYPOINT_COLOR: Color = Color::srgb(0.2, 1.0, 0.2);
@@ -16,18 +19,28 @@ pub struct PoseDebugPlugin;
 
 impl Plugin for PoseDebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::PoseDebug), (enable_pose_runtime, setup))
-            .add_systems(OnExit(AppState::PoseDebug), disable_pose_runtime)
-            .add_systems(
-                Update,
-                (
-                    handle_escape_to_menu,
-                    update_camera_view,
-                    draw_keypoints,
-                    update_mask_overlay,
-                )
-                    .run_if(in_state(AppState::PoseDebug)),
-            );
+        app.add_systems(
+            OnEnter(AppState::PoseDebug),
+            (enable_pose_runtime, enable_pose_frame_capture, setup),
+        )
+        .add_systems(
+            OnExit(AppState::PoseDebug),
+            (
+                cleanup_debug_images,
+                disable_pose_frame_capture,
+                disable_pose_runtime,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_escape_to_menu,
+                update_camera_view,
+                draw_keypoints,
+                update_mask_overlay,
+            )
+                .run_if(in_state(AppState::PoseDebug)),
+        );
     }
 }
 
@@ -101,6 +114,22 @@ fn setup(
     commands.insert_resource(MaskImageHandle(mask_handle));
 }
 
+fn cleanup_debug_images(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    camera_image: Option<Res<CameraImageHandle>>,
+    mask_image: Option<Res<MaskImageHandle>>,
+) {
+    if let Some(handle) = camera_image {
+        images.remove(handle.0.id());
+        commands.remove_resource::<CameraImageHandle>();
+    }
+    if let Some(handle) = mask_image {
+        images.remove(handle.0.id());
+        commands.remove_resource::<MaskImageHandle>();
+    }
+}
+
 fn update_camera_view(
     latest_frame: Res<LatestFrameRes>,
     camera_image: Res<CameraImageHandle>,
@@ -136,7 +165,14 @@ fn update_camera_view(
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         );
     } else {
-        image.data = Some(frame.data.clone());
+        match image.data.as_mut() {
+            Some(data) if data.len() == frame.data.len() => {
+                data.copy_from_slice(&frame.data);
+            }
+            _ => {
+                image.data = Some(frame.data.clone());
+            }
+        }
     }
 
     if let Ok(mut sprite) = sprite.single_mut() {
