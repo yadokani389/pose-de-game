@@ -11,6 +11,7 @@ mod profile;
 mod worker;
 
 use super::{LatestFrameRes, PeopleDataRes, PoseRuntimeSettings};
+pub(crate) use map::PoseTrackState;
 use worker::InferWorker;
 
 pub(super) fn infer_from_camera(
@@ -20,6 +21,7 @@ pub(super) fn infer_from_camera(
     settings: Res<PoseRuntimeSettings>,
     people_data: ResMut<PeopleDataRes>,
     latest_frame: ResMut<LatestFrameRes>,
+    tracks: ResMut<PoseTrackState>,
     control: Res<crate::pose::PoseRuntimeControl>,
 ) {
     infer::infer_from_camera(
@@ -29,6 +31,7 @@ pub(super) fn infer_from_camera(
         settings,
         people_data,
         latest_frame,
+        tracks,
         control,
     );
 }

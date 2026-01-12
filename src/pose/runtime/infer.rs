@@ -4,7 +4,7 @@ use crate::args::Args;
 
 use super::super::{FrameImage, LatestFrameRes, PeopleDataRes, PoseRuntimeSettings};
 use super::camera::FrameReceiver;
-use super::map::build_people_data;
+use super::map::{PoseTrackState, build_people_data};
 use super::worker::{InferRequest, InferWorker};
 
 pub(super) fn infer_from_camera(
@@ -14,6 +14,7 @@ pub(super) fn infer_from_camera(
     settings: Res<PoseRuntimeSettings>,
     mut people_data: ResMut<PeopleDataRes>,
     mut latest_frame: ResMut<LatestFrameRes>,
+    mut tracks: ResMut<PoseTrackState>,
     control: Res<crate::pose::PoseRuntimeControl>,
 ) {
     let capture_frame = settings.capture_frame;
@@ -35,8 +36,12 @@ pub(super) fn infer_from_camera(
         }
 
         let mut frame_rgba = response.frame_rgba;
-        **people_data =
-            build_people_data(&response.output, frame_rgba.as_deref(), args.show_person);
+        **people_data = build_people_data(
+            &response.output,
+            frame_rgba.as_deref(),
+            args.show_person,
+            &mut *tracks,
+        );
 
         if settings.capture_frame
             && let Some(rgba) = frame_rgba.take()

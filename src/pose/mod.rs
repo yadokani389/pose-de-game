@@ -15,6 +15,7 @@ impl Plugin for PosePlugin {
             .init_resource::<PoseRuntimeSettings>()
             .init_resource::<PeopleDataRes>()
             .init_resource::<LatestFrameRes>()
+            .init_resource::<runtime::PoseTrackState>()
             .add_systems(Update, infer_from_camera.run_if(pose_runtime_enabled));
     }
 }
@@ -37,19 +38,25 @@ pub fn pose_runtime_enabled(control: Res<PoseRuntimeControl>) -> bool {
     control.enabled
 }
 
-pub fn enable_pose_runtime(mut control: ResMut<PoseRuntimeControl>) {
+pub fn enable_pose_runtime(
+    mut control: ResMut<PoseRuntimeControl>,
+    mut tracks: ResMut<runtime::PoseTrackState>,
+) {
     control.enabled = true;
     control.generation = control.generation.wrapping_add(1);
+    tracks.clear();
 }
 
 pub fn disable_pose_runtime(
     mut control: ResMut<PoseRuntimeControl>,
     mut people: ResMut<PeopleDataRes>,
     mut latest_frame: ResMut<LatestFrameRes>,
+    mut tracks: ResMut<runtime::PoseTrackState>,
 ) {
     control.enabled = false;
     people.clear();
     latest_frame.frame = None;
+    tracks.clear();
 }
 
 #[derive(Resource, Debug, Clone, Copy, Default)]
