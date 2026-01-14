@@ -36,6 +36,8 @@ const PUCK_DRAG_PER_SECOND: f32 = 0.9;
 const PUCK_STOP_SPEED: f32 = 5.0;
 const CAMERA_OVERLAY_ALPHA: f32 = 0.05;
 const CAMERA_OVERLAY_Z: f32 = 0.5;
+const SWEEP_EPS: f32 = 1.0e-5;
+const SWEEP_OVERLAP_MARGIN: f32 = 0.5;
 const LEFT_OVERLAY_LAYER: usize = 1;
 const RIGHT_OVERLAY_LAYER: usize = 2;
 const SCORE_LAYER: usize = 3;
@@ -104,6 +106,7 @@ struct Mallet {
 #[derive(Component, Clone, Copy)]
 struct MalletKinematics {
     prev_pos: Vec2,
+    curr_pos: Vec2,
     velocity: Vec2,
     samples: [Vec2; MALLET_VELOCITY_SAMPLES],
     sample_index: usize,
@@ -114,6 +117,7 @@ impl MalletKinematics {
     fn new(initial_pos: Vec2) -> Self {
         Self {
             prev_pos: initial_pos,
+            curr_pos: initial_pos,
             velocity: Vec2::ZERO,
             samples: [Vec2::ZERO; MALLET_VELOCITY_SAMPLES],
             sample_index: 0,
@@ -123,12 +127,13 @@ impl MalletKinematics {
 
     fn update(&mut self, new_pos: Vec2, dt: f32) {
         let inst_velocity = if dt > 0.0 {
-            (new_pos - self.prev_pos) / dt
+            (new_pos - self.curr_pos) / dt
         } else {
             Vec2::ZERO
         };
 
-        self.prev_pos = new_pos;
+        self.prev_pos = self.curr_pos;
+        self.curr_pos = new_pos;
         self.samples[self.sample_index] = inst_velocity;
         self.sample_index = (self.sample_index + 1) % MALLET_VELOCITY_SAMPLES;
         if self.sample_count < MALLET_VELOCITY_SAMPLES {
@@ -561,8 +566,8 @@ fn update_camera_overlay(
     overlay_handle: Res<CameraOverlayImageHandle>,
     mut images: ResMut<Assets<Image>>,
     mut sprites: ParamSet<(
-        Query<&mut Sprite, With<LeftCameraOverlay>>,
-        Query<&mut Sprite, With<RightCameraOverlay>>,
+        Single<&mut Sprite, With<LeftCameraOverlay>>,
+        Single<&mut Sprite, With<RightCameraOverlay>>,
     )>,
 ) {
     if !latest_frame.is_changed() {
@@ -611,22 +616,20 @@ fn update_camera_overlay(
     let left_rect = Rect::new(0.0, 0.0, half_width, height);
     let right_rect = Rect::new(half_width, 0.0, width, height);
 
-    if let Ok(mut sprite) = sprites.p0().single_mut() {
-        if sprite.custom_size != Some(overlay_size) {
-            sprite.custom_size = Some(overlay_size);
-        }
-        if sprite.rect != Some(left_rect) {
-            sprite.rect = Some(left_rect);
-        }
+    let mut sprite = sprites.p0();
+    if sprite.custom_size != Some(overlay_size) {
+        sprite.custom_size = Some(overlay_size);
+    }
+    if sprite.rect != Some(left_rect) {
+        sprite.rect = Some(left_rect);
     }
 
-    if let Ok(mut sprite) = sprites.p1().single_mut() {
-        if sprite.custom_size != Some(overlay_size) {
-            sprite.custom_size = Some(overlay_size);
-        }
-        if sprite.rect != Some(right_rect) {
-            sprite.rect = Some(right_rect);
-        }
+    let mut sprite = sprites.p1();
+    if sprite.custom_size != Some(overlay_size) {
+        sprite.custom_size = Some(overlay_size);
+    }
+    if sprite.rect != Some(right_rect) {
+        sprite.rect = Some(right_rect);
     }
 }
 
@@ -777,7 +780,7 @@ fn move_mallets(
 fn move_puck(
     time: Res<Time>,
     mut puck_query: Query<(&mut Transform, &mut Velocity), With<Puck>>,
-    mallets: Query<(&Transform, &Mallet, &MalletKinematics), Without<Puck>>,
+    mallets: Query<(&Mallet, &MalletKinematics), Without<Puck>>,
     mut scoreboard: ResMut<Scoreboard>,
 ) {
     let Some((mut transform, mut velocity)) = puck_query.iter_mut().next() else {
@@ -788,33 +791,36 @@ fn move_puck(
     if dt > 0.0 {
         let drag = PUCK_DRAG_PER_SECOND.powf(dt);
         velocity.0 *= drag;
-        if velocity.0.length() < PUCK_STOP_SPEED {
-            velocity.0 = Vec2::ZERO;
-        }
     }
     let mut pos = transform.translation.truncate();
+    let mut puck_start = pos;
     pos += velocity.0 * dt;
 
     let half_width = BOARD_WIDTH * 0.5;
     let half_height = BOARD_HEIGHT * 0.5;
     let goal_half_width = GOAL_WIDTH * 0.5;
+    let mut had_impact = false;
 
     if half_width - PUCK_RADIUS < pos.x {
         pos.x = half_width - PUCK_RADIUS;
         velocity.0.x = -velocity.0.x.abs();
+        had_impact = true;
     }
     if pos.x < -half_width + PUCK_RADIUS {
         pos.x = -half_width + PUCK_RADIUS;
         velocity.0.x = velocity.0.x.abs();
+        had_impact = true;
     }
 
     if half_height - PUCK_RADIUS < pos.y {
         if goal_half_width < pos.x.abs() {
             pos.y = half_height - PUCK_RADIUS;
             velocity.0.y = -velocity.0.y.abs();
+            had_impact = true;
         } else {
             scoreboard.left = scoreboard.left.saturating_add(1);
             reset_puck(&mut pos, &mut velocity.0, PlayerSide::Left);
+            puck_start = pos;
         }
     }
 
@@ -822,31 +828,48 @@ fn move_puck(
         if goal_half_width < pos.x.abs() {
             pos.y = -half_height + PUCK_RADIUS;
             velocity.0.y = velocity.0.y.abs();
+            had_impact = true;
         } else {
             scoreboard.right = scoreboard.right.saturating_add(1);
             reset_puck(&mut pos, &mut velocity.0, PlayerSide::Right);
+            puck_start = pos;
         }
     }
 
-    for (mallet_transform, mallet, kinematics) in mallets.iter() {
-        let mallet_pos = mallet_transform.translation.truncate();
-        let mallet_velocity = kinematics.velocity;
-        let delta = pos - mallet_pos;
-        let min_dist = MALLET_RADIUS + PUCK_RADIUS;
-        let dist = delta.length();
-        if dist < min_dist && dist != 0.0 {
-            let normal = delta / dist;
-            pos = mallet_pos + normal * min_dist;
-            let relative = velocity.0 - mallet_velocity;
-            let rel_dot = relative.dot(normal);
-            if rel_dot < 0.0 {
-                let reflected = relative - (1.0 + MALLET_RESTITUTION) * rel_dot * normal;
-                velocity.0 = reflected + mallet_velocity;
-                if mallet.side == PlayerSide::Left {
-                    velocity.0.y = velocity.0.y.max(0.0);
-                } else {
-                    velocity.0.y = velocity.0.y.min(0.0);
-                }
+    let puck_end = pos;
+    let min_dist = MALLET_RADIUS + PUCK_RADIUS;
+    let mut best_hit: Option<SweptMalletHit> = None;
+    for (mallet, kinematics) in mallets.iter() {
+        let mallet_start = kinematics.prev_pos;
+        let mallet_end = kinematics.curr_pos;
+        if let Some(hit) =
+            sweep_circle_hit(puck_start, puck_end, mallet_start, mallet_end, min_dist)
+        {
+            let entry = SweptMalletHit {
+                t: hit.t,
+                normal: hit.normal,
+                mallet_pos: hit.mallet_pos,
+                side: mallet.side,
+                velocity: kinematics.velocity,
+            };
+            if best_hit.map_or(true, |best| entry.t < best.t) {
+                best_hit = Some(entry);
+            }
+        }
+    }
+
+    if let Some(hit) = best_hit {
+        pos = hit.mallet_pos + hit.normal * min_dist;
+        let relative = velocity.0 - hit.velocity;
+        let rel_dot = relative.dot(hit.normal);
+        if rel_dot < 0.0 {
+            let reflected = relative - (1.0 + MALLET_RESTITUTION) * rel_dot * hit.normal;
+            velocity.0 = reflected + hit.velocity;
+            had_impact = true;
+            if hit.side == PlayerSide::Left {
+                velocity.0.y = velocity.0.y.max(0.0);
+            } else {
+                velocity.0.y = velocity.0.y.min(0.0);
             }
         }
     }
@@ -854,6 +877,9 @@ fn move_puck(
     let speed = velocity.0.length();
     if PUCK_MAX_SPEED < speed {
         velocity.0 = velocity.0 / speed * PUCK_MAX_SPEED;
+    }
+    if dt > 0.0 && !had_impact && velocity.0.length() < PUCK_STOP_SPEED {
+        velocity.0 = Vec2::ZERO;
     }
 
     transform.translation.x = pos.x;
@@ -867,6 +893,93 @@ fn clamp_vec2_length(vec: Vec2, max: f32) -> Vec2 {
     } else {
         vec
     }
+}
+
+#[derive(Clone, Copy)]
+struct SweptHit {
+    t: f32,
+    normal: Vec2,
+    mallet_pos: Vec2,
+}
+
+#[derive(Clone, Copy)]
+struct SweptMalletHit {
+    t: f32,
+    normal: Vec2,
+    mallet_pos: Vec2,
+    side: PlayerSide,
+    velocity: Vec2,
+}
+
+fn sweep_circle_hit(
+    puck_start: Vec2,
+    puck_end: Vec2,
+    mallet_start: Vec2,
+    mallet_end: Vec2,
+    radius: f32,
+) -> Option<SweptHit> {
+    let puck_delta = puck_end - puck_start;
+    let mallet_delta = mallet_end - mallet_start;
+    let relative_delta = puck_delta - mallet_delta;
+    let start_delta = puck_start - mallet_start;
+    let radius_sq = radius * radius;
+
+    let a = relative_delta.length_squared();
+    let c = start_delta.length_squared() - radius_sq;
+    let t = if c <= 0.0 {
+        let separating = start_delta.dot(relative_delta) >= 0.0;
+        let overlap_margin_sq = SWEEP_OVERLAP_MARGIN * SWEEP_OVERLAP_MARGIN;
+        let deep_overlap = c < -overlap_margin_sq;
+        if separating && !deep_overlap {
+            return None;
+        }
+        0.0
+    } else if a <= SWEEP_EPS {
+        return None;
+    } else {
+        let b = 2.0 * start_delta.dot(relative_delta);
+        let disc = b * b - 4.0 * a * c;
+        if disc < 0.0 {
+            return None;
+        }
+        let sqrt_disc = disc.sqrt();
+        let inv = 0.5 / a;
+        let t1 = (-b - sqrt_disc) * inv;
+        let t2 = (-b + sqrt_disc) * inv;
+        if (0.0..=1.0).contains(&t1) {
+            t1
+        } else if (0.0..=1.0).contains(&t2) {
+            t2
+        } else {
+            return None;
+        }
+    };
+
+    let mallet_pos = mallet_start + mallet_delta * t;
+    let puck_pos = puck_start + puck_delta * t;
+    let mut normal = puck_pos - mallet_pos;
+    if normal.length_squared() <= SWEEP_EPS {
+        let fallback = if start_delta.length_squared() > SWEEP_EPS {
+            start_delta
+        } else if a > SWEEP_EPS {
+            relative_delta
+        } else {
+            Vec2::Y
+        };
+        normal = fallback.normalize_or_zero();
+    } else {
+        normal = normal.normalize_or_zero();
+    }
+
+    if normal.length_squared() <= SWEEP_EPS {
+        normal = Vec2::Y;
+    }
+
+    Some(SweptHit {
+        t,
+        normal,
+        mallet_pos,
+    })
 }
 
 fn reset_puck(pos: &mut Vec2, velocity: &mut Vec2, scorer: PlayerSide) {
@@ -888,8 +1001,8 @@ fn update_score_text(scoreboard: Res<Scoreboard>, mut query: Query<&mut Text2d, 
 
 fn update_score_ui_positions(
     cameras: Query<&Projection, With<ScoreCamera>>,
-    mut score_text: Query<&mut Transform, With<ScoreText>>,
-    mut keymap_text: Query<&mut Transform, (With<KeymapText>, Without<ScoreText>)>,
+    mut score_text: Single<&mut Transform, With<ScoreText>>,
+    mut keymap_text: Single<&mut Transform, (With<KeymapText>, Without<ScoreText>)>,
 ) {
     let Some(projection) = cameras.iter().next() else {
         return;
@@ -903,13 +1016,9 @@ fn update_score_ui_positions(
     let right = area.max.x - SCORE_EDGE_MARGIN;
     let bottom = area.min.y + SCORE_EDGE_MARGIN;
 
-    if let Ok(mut transform) = score_text.single_mut() {
-        transform.translation.x = 0.0;
-        transform.translation.y = top;
-    }
+    score_text.translation.x = 0.0;
+    score_text.translation.y = top;
 
-    if let Ok(mut transform) = keymap_text.single_mut() {
-        transform.translation.x = right;
-        transform.translation.y = bottom;
-    }
+    keymap_text.translation.x = right;
+    keymap_text.translation.y = bottom;
 }
