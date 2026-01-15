@@ -40,7 +40,7 @@ pub(super) fn infer_from_camera(
             &response.output,
             frame_rgba.as_deref(),
             args.show_person,
-            &mut *tracks,
+            &mut tracks,
         );
 
         if settings.capture_frame

@@ -134,7 +134,7 @@ fn update_camera_view(
     latest_frame: Res<LatestFrameRes>,
     camera_image: Res<CameraImageHandle>,
     mut images: ResMut<Assets<Image>>,
-    mut sprite: Query<&mut Sprite, With<CameraSprite>>,
+    mut sprite: Single<&mut Sprite, With<CameraSprite>>,
 ) {
     if !latest_frame.is_changed() {
         return;
@@ -175,11 +175,9 @@ fn update_camera_view(
         }
     }
 
-    if let Ok(mut sprite) = sprite.single_mut() {
-        let size = Vec2::new(frame.width as f32, frame.height as f32);
-        if sprite.custom_size != Some(size) {
-            sprite.custom_size = Some(size);
-        }
+    let size = Vec2::new(frame.width as f32, frame.height as f32);
+    if sprite.custom_size != Some(size) {
+        sprite.custom_size = Some(size);
     }
 }
 
@@ -213,7 +211,7 @@ fn update_mask_overlay(
     latest_frame: Res<LatestFrameRes>,
     mask_handle: Res<MaskImageHandle>,
     mut images: ResMut<Assets<Image>>,
-    mut sprite: Query<&mut Sprite, With<MaskSprite>>,
+    mut sprite: Single<&mut Sprite, With<MaskSprite>>,
 ) {
     let Some(frame) = latest_frame.frame.as_ref() else {
         return;
@@ -305,11 +303,9 @@ fn update_mask_texture(
     }
 }
 
-fn update_mask_sprite(sprite: &mut Query<&mut Sprite, With<MaskSprite>>, width: u32, height: u32) {
-    if let Ok(mut sprite) = sprite.single_mut() {
-        let size = Vec2::new(width as f32, height as f32);
-        if sprite.custom_size != Some(size) {
-            sprite.custom_size = Some(size);
-        }
+fn update_mask_sprite(sprite: &mut Single<&mut Sprite, With<MaskSprite>>, width: u32, height: u32) {
+    let size = Vec2::new(width as f32, height as f32);
+    if sprite.custom_size != Some(size) {
+        sprite.custom_size = Some(size);
     }
 }

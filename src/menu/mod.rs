@@ -39,6 +39,7 @@ struct MenuSelection {
 
 #[derive(Clone, Copy)]
 enum MenuAction {
+    StartAirHockey,
     StartBreakout,
     StartPoseDebug,
 }
@@ -58,6 +59,13 @@ const MENU_ENTRIES: &[MenuEntry] = &[
         summary: "反射と角度の読み合い",
         status: "利用可",
         action: Some(MenuAction::StartBreakout),
+    },
+    MenuEntry {
+        title: "エアホッケー",
+        badge: "PLAY",
+        summary: "右手でマレット操作",
+        status: "利用可",
+        action: Some(MenuAction::StartAirHockey),
     },
     MenuEntry {
         title: "カメラデバッグ",
@@ -236,10 +244,10 @@ fn menu_keyboard_activate(
     selection: Res<MenuSelection>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::Enter) || keyboard_input.just_pressed(KeyCode::Space) {
-        if let Some(action) = action_for(selection.index) {
-            apply_action(action, &mut next_state);
-        }
+    if (keyboard_input.just_pressed(KeyCode::Enter) || keyboard_input.just_pressed(KeyCode::Space))
+        && let Some(action) = action_for(selection.index)
+    {
+        apply_action(action, &mut next_state);
     }
 }
 
@@ -287,6 +295,7 @@ fn apply_selection_classes(
 
 fn apply_action(action: MenuAction, next_state: &mut NextState<AppState>) {
     match action {
+        MenuAction::StartAirHockey => next_state.set(AppState::AirHockey),
         MenuAction::StartBreakout => next_state.set(AppState::Breakout),
         MenuAction::StartPoseDebug => next_state.set(AppState::PoseDebug),
     }

@@ -1,4 +1,4 @@
-#![allow(clippy::type_complexity)]
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
 use bevy::prelude::*;
 use bevy_flair::prelude::FlairPlugin;
@@ -16,6 +16,7 @@ mod pose;
 pub enum AppState {
     #[default]
     MainMenu,
+    AirHockey,
     Breakout,
     PoseDebug,
 }
@@ -46,6 +47,7 @@ fn main() {
         pose::PosePlugin,
         assets::EmbeddedAssetsPlugin,
         menu::GameMenuPlugin,
+        games::air_hockey::AirHockeyPlugin,
         games::breakout::GamePlugin,
         games::pose_debug::PoseDebugPlugin,
     ))
