@@ -87,7 +87,6 @@
                   xorg.libXcursor
                   xorg.libXi
                   xorg.libXrandr
-
                 ]
                 ++ lib.optional openvinoSupport [
                   openvino
@@ -97,9 +96,6 @@
 
               cargoDeps = rustPlatform.importCargoLock {
                 lockFile = ./Cargo.lock;
-                outputHashes = {
-                  "bevy-wasm-tasks-0.16.0" = "sha256-8RBYwPmGiiXVkmIrV/n2UhIDEX8UzAwIUZV+PcSog5c=";
-                };
               };
 
               postFixup =

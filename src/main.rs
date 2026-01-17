@@ -17,7 +17,6 @@ pub enum AppState {
     #[default]
     MainMenu,
     AirHockey,
-    Breakout,
     PoseDebug,
 }
 
@@ -48,7 +47,6 @@ fn main() {
         assets::EmbeddedAssetsPlugin,
         menu::GameMenuPlugin,
         games::air_hockey::AirHockeyPlugin,
-        games::breakout::GamePlugin,
         games::pose_debug::PoseDebugPlugin,
     ))
     .init_state::<AppState>()

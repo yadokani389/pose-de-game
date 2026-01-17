@@ -40,7 +40,6 @@ struct MenuSelection {
 #[derive(Clone, Copy)]
 enum MenuAction {
     StartAirHockey,
-    StartBreakout,
     StartPoseDebug,
 }
 
@@ -54,13 +53,6 @@ struct MenuEntry {
 
 const MENU_ENTRIES: &[MenuEntry] = &[
     MenuEntry {
-        title: "ブロック崩し",
-        badge: "PLAY",
-        summary: "反射と角度の読み合い",
-        status: "利用可",
-        action: Some(MenuAction::StartBreakout),
-    },
-    MenuEntry {
         title: "エアホッケー",
         badge: "PLAY",
         summary: "右手でマレット操作",
@@ -73,6 +65,13 @@ const MENU_ENTRIES: &[MenuEntry] = &[
         summary: "姿勢推定の表示確認",
         status: "デバッグ",
         action: Some(MenuAction::StartPoseDebug),
+    },
+    MenuEntry {
+        title: "Coming Soon 02",
+        badge: "SOON",
+        summary: "新しいゲーム準備中",
+        status: "準備中",
+        action: None,
     },
     MenuEntry {
         title: "Coming Soon 03",
@@ -296,7 +295,6 @@ fn apply_selection_classes(
 fn apply_action(action: MenuAction, next_state: &mut NextState<AppState>) {
     match action {
         MenuAction::StartAirHockey => next_state.set(AppState::AirHockey),
-        MenuAction::StartBreakout => next_state.set(AppState::Breakout),
         MenuAction::StartPoseDebug => next_state.set(AppState::PoseDebug),
     }
 }
