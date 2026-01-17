@@ -59,11 +59,13 @@ pub(super) fn build_people_data(
 #[derive(Resource, Default)]
 pub(crate) struct PoseTrackState {
     tracks: Vec<TrackState>,
+    next_id: u64,
 }
 
 impl PoseTrackState {
     pub(crate) fn clear(&mut self) {
         self.tracks.clear();
+        self.next_id = 0;
     }
 
     fn update(&mut self, mut detections: Vec<DetectionData>, now: Instant) -> PeopleData {
@@ -112,7 +114,9 @@ impl PoseTrackState {
             if det_used[det_index] {
                 continue;
             }
-            self.tracks.push(TrackState::from_detection(det, now));
+            let id = self.next_id;
+            self.next_id = self.next_id.wrapping_add(1);
+            self.tracks.push(TrackState::from_detection(det, now, id));
         }
 
         self.tracks
@@ -121,6 +125,7 @@ impl PoseTrackState {
         self.tracks
             .iter()
             .map(|track| PersonData {
+                id: track.id,
                 keypoints: track.keypoints.iter().map(|kp| kp.pos).collect(),
                 person_image: track.person_image.clone(),
             })
@@ -136,6 +141,7 @@ struct DetectionData {
 }
 
 struct TrackState {
+    id: u64,
     bbox: BBox,
     keypoints: Vec<SmoothedKeypoint>,
     last_seen: Instant,
@@ -148,7 +154,7 @@ struct SmoothedKeypoint {
 }
 
 impl TrackState {
-    fn from_detection(det: DetectionData, now: Instant) -> Self {
+    fn from_detection(det: DetectionData, now: Instant, id: u64) -> Self {
         let keypoints = det
             .keypoints
             .into_iter()
@@ -158,6 +164,7 @@ impl TrackState {
             })
             .collect();
         Self {
+            id,
             bbox: det.bbox,
             keypoints,
             last_seen: now,

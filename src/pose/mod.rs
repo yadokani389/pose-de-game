@@ -3,9 +3,11 @@ use bevy::prelude::*;
 
 use runtime::infer_from_camera;
 
+mod render;
 mod runtime;
 
 use crate::args::Args;
+pub use render::{PoseRenderSettings, disable_pose_render, enable_pose_render};
 
 pub struct PosePlugin;
 
@@ -17,6 +19,7 @@ impl Plugin for PosePlugin {
             .init_resource::<LatestFrameRes>()
             .init_resource::<runtime::PoseTrackState>()
             .add_systems(Update, infer_from_camera.run_if(pose_runtime_enabled));
+        render::configure(app);
     }
 }
 
@@ -72,8 +75,36 @@ pub fn disable_pose_frame_capture(mut settings: ResMut<PoseRuntimeSettings>) {
     settings.capture_frame = false;
 }
 
+pub fn estimate_center_x(keypoints: &[Option<[f64; 2]>]) -> Option<f64> {
+    if let (Some(left), Some(right)) = (
+        keypoints.get(5).and_then(|kp| *kp),
+        keypoints.get(6).and_then(|kp| *kp),
+    ) {
+        return Some((left[0] + right[0]) * 0.5);
+    }
+
+    if let (Some(left), Some(right)) = (
+        keypoints.get(11).and_then(|kp| *kp),
+        keypoints.get(12).and_then(|kp| *kp),
+    ) {
+        return Some((left[0] + right[0]) * 0.5);
+    }
+
+    let mut total = 0.0;
+    let mut count = 0.0;
+    for keypoint in keypoints.iter().flatten() {
+        total += keypoint[0];
+        count += 1.0;
+    }
+    if count > 0.0 {
+        return Some(total / count);
+    }
+    None
+}
+
 #[derive(Debug, Clone)]
 pub struct PersonData {
+    pub id: u64,
     pub keypoints: Vec<Option<[f64; 2]>>,
     pub person_image: Option<Image>,
 }

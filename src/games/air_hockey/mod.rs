@@ -852,7 +852,7 @@ fn move_puck(
                 side: mallet.side,
                 velocity: kinematics.velocity,
             };
-            if best_hit.map_or(true, |best| entry.t < best.t) {
+            if best_hit.is_none_or(|best| entry.t < best.t) {
                 best_hit = Some(entry);
             }
         }
