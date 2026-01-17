@@ -6,6 +6,7 @@ use clap::Parser;
 
 mod args;
 mod assets;
+mod audio;
 mod games;
 mod infer;
 mod menu;
@@ -49,6 +50,7 @@ fn main() {
         games::air_hockey::AirHockeyPlugin,
         games::pose_debug::PoseDebugPlugin,
     ))
+    .add_systems(Startup, audio::pitch::setup_beeps)
     .init_state::<AppState>()
     .insert_resource(args)
     .run();
