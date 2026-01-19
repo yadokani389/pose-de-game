@@ -29,18 +29,18 @@ struct EmbeddedModel {
 }
 
 const EMBEDDED_POSE_MODEL: EmbeddedModel = EmbeddedModel {
-    name: "embedded pose model (assets/models/yolo11n-pose.onnx)",
+    name: "embedded pose model (assets/models/yolo26n-pose.onnx)",
     bytes: include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/assets/models/yolo11n-pose.onnx"
+        "/assets/models/yolo26n-pose.onnx"
     )),
 };
 
 const EMBEDDED_SEG_MODEL: EmbeddedModel = EmbeddedModel {
-    name: "embedded seg model (assets/models/yolo11n-seg.onnx)",
+    name: "embedded seg model (assets/models/yolo26n-seg.onnx)",
     bytes: include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/assets/models/yolo11n-seg.onnx"
+        "/assets/models/yolo26n-seg.onnx"
     )),
 };
 

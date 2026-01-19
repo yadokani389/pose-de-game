@@ -38,7 +38,12 @@ pub(crate) fn decode_pose(
         return Ok(Vec::new());
     }
 
-    let kpt_count = (channels - 5) / 3;
+    let nms_format = 6 <= channels && (channels - 6) % 3 == 0;
+    let kpt_count = if nms_format {
+        (channels - 6) / 3
+    } else {
+        (channels - 5) / 3
+    };
     let mut detections_out = Vec::new();
 
     for det_index in 0..detections {
@@ -47,18 +52,30 @@ pub(crate) fn decode_pose(
             continue;
         }
 
-        let (_, bbox) = decode_bbox(
-            &output.data,
-            layout,
-            det_index,
-            channels,
-            detections,
-            letterbox,
-        );
+        let (_, bbox) = if nms_format {
+            let x1 = get_value(&output.data, layout, det_index, 0, channels, detections);
+            let y1 = get_value(&output.data, layout, det_index, 1, channels, detections);
+            let x2 = get_value(&output.data, layout, det_index, 2, channels, detections);
+            let y2 = get_value(&output.data, layout, det_index, 3, channels, detections);
+            let class_id = get_value(&output.data, layout, det_index, 5, channels, detections);
+            if class_id < 0.0 || class_id as usize != crate::infer::PERSON_CLASS_ID {
+                continue;
+            }
+            decode_bbox_xyxy(x1, y1, x2, y2, letterbox)
+        } else {
+            decode_bbox(
+                &output.data,
+                layout,
+                det_index,
+                channels,
+                detections,
+                letterbox,
+            )
+        };
 
         let mut keypoints = Vec::with_capacity(kpt_count);
         for k in 0..kpt_count {
-            let base = 5 + k * 3;
+            let base = if nms_format { 6 + k * 3 } else { 5 + k * 3 };
             let x = get_value(&output.data, layout, det_index, base, channels, detections);
             let y = get_value(
                 &output.data,
@@ -121,6 +138,94 @@ pub(crate) fn decode_seg(
             "seg output channels too small: channels={channels} mask_dim={mask_dim}"
         ));
     }
+
+    let mut detections_out = Vec::new();
+    let nms_format = channels == mask_dim + 6;
+
+    if nms_format {
+        for det_index in 0..detections {
+            let score = get_value(
+                &output.dets.data,
+                layout,
+                det_index,
+                4,
+                channels,
+                detections,
+            );
+            if score < score_threshold {
+                continue;
+            }
+
+            let class_id = get_value(
+                &output.dets.data,
+                layout,
+                det_index,
+                5,
+                channels,
+                detections,
+            );
+            if class_id < 0.0 || class_id as usize != person_class {
+                continue;
+            }
+
+            let x1 = get_value(
+                &output.dets.data,
+                layout,
+                det_index,
+                0,
+                channels,
+                detections,
+            );
+            let y1 = get_value(
+                &output.dets.data,
+                layout,
+                det_index,
+                1,
+                channels,
+                detections,
+            );
+            let x2 = get_value(
+                &output.dets.data,
+                layout,
+                det_index,
+                2,
+                channels,
+                detections,
+            );
+            let y2 = get_value(
+                &output.dets.data,
+                layout,
+                det_index,
+                3,
+                channels,
+                detections,
+            );
+            let (bbox_input, bbox) = decode_bbox_xyxy(x1, y1, x2, y2, letterbox);
+
+            let mut coeffs = Vec::with_capacity(mask_dim);
+            for k in 0..mask_dim {
+                let coeff = get_value(
+                    &output.dets.data,
+                    layout,
+                    det_index,
+                    6 + k,
+                    channels,
+                    detections,
+                );
+                coeffs.push(coeff);
+            }
+
+            detections_out.push(SegDetection {
+                bbox,
+                bbox_input,
+                score,
+                coeffs,
+            });
+        }
+
+        return Ok(detections_out);
+    }
+
     let class_count = channels - 4 - mask_dim;
     if person_class >= class_count {
         return Err(anyhow::anyhow!(
@@ -128,7 +233,6 @@ pub(crate) fn decode_seg(
         ));
     }
 
-    let mut detections_out = Vec::new();
     let class_offset = 4 + person_class;
     let coeff_offset = 4 + class_count;
 
@@ -402,6 +506,27 @@ fn decode_bbox(
     let (ox2, oy2) = letterbox.to_original(x2, y2);
     let output_bbox = BBox::new(ox1, oy1, ox2, oy2);
 
+    (input_bbox, output_bbox)
+}
+
+fn decode_bbox_xyxy(x1: f32, y1: f32, x2: f32, y2: f32, letterbox: &LetterboxInfo) -> (BBox, BBox) {
+    let max_coord = (letterbox.input_size - 1) as f32;
+    let mut ix1 = x1.clamp(0.0, max_coord);
+    let mut iy1 = y1.clamp(0.0, max_coord);
+    let mut ix2 = x2.clamp(0.0, max_coord);
+    let mut iy2 = y2.clamp(0.0, max_coord);
+
+    if ix2 < ix1 {
+        std::mem::swap(&mut ix1, &mut ix2);
+    }
+    if iy2 < iy1 {
+        std::mem::swap(&mut iy1, &mut iy2);
+    }
+
+    let input_bbox = BBox::new(ix1, iy1, ix2, iy2);
+    let (ox1, oy1) = letterbox.to_original(ix1, iy1);
+    let (ox2, oy2) = letterbox.to_original(ix2, iy2);
+    let output_bbox = BBox::new(ox1, oy1, ox2, oy2);
     (input_bbox, output_bbox)
 }
 

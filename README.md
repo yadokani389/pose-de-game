@@ -36,7 +36,7 @@ cargo run --release -- --list-cameras
 モデルパスを明示する場合（未指定なら `assets/models` の埋め込みモデルを使用）:
 
 ```bash
-cargo run --release -- --pose-model path/to/yolo11n-pose.onnx --seg-model path/to/yolo11n-seg.onnx
+cargo run --release -- --pose-model path/to/yolo26n-pose.onnx --seg-model path/to/yolo26n-seg.onnx
 ```
 
 バックエンド指定例（`openvino` は feature 有効時のみ）:
