@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use bevy::{
     asset::RenderAssetUsages,
     camera::{ScalingMode, Viewport, visibility::RenderLayers},
-    math::Rect,
+    math::{Rect, primitives::Triangle2d},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     sprite::Anchor,
@@ -24,6 +24,9 @@ const BOARD_HEIGHT: f32 = 600.0;
 const BOARD_THICKNESS: f32 = 12.0;
 const CENTER_LINE_THICKNESS: f32 = 6.0;
 const GOAL_WIDTH: f32 = 150.0;
+const CORNER_TRIANGLE_SIZE: f32 = 30.0;
+const CORNER_TRIANGLE_Z: f32 = 1.0;
+const WALL_INNER_OFFSET: f32 = BOARD_THICKNESS * 0.5;
 
 const PUCK_RADIUS: f32 = 16.0;
 const MALLET_RADIUS: f32 = 30.0;
@@ -341,6 +344,42 @@ fn setup(
         Transform::from_xyz(-BOARD_WIDTH * 0.5, 0.0, 1.0),
         DespawnOnExit(AppState::AirHockey),
     ));
+
+    let corner_triangle_mesh = meshes.add(Mesh::from(Triangle2d::new(
+        Vec2::ZERO,
+        Vec2::new(1.0, 0.0),
+        Vec2::new(0.0, 1.0),
+    )));
+    let corner_triangle_material = materials.add(Color::srgb(0.2, 0.2, 0.25));
+    let half_width = BOARD_WIDTH * 0.5;
+    let half_height = BOARD_HEIGHT * 0.5;
+    let inner_half_width = half_width - WALL_INNER_OFFSET;
+    let inner_half_height = half_height - WALL_INNER_OFFSET;
+    let corner_triangles = [
+        (Vec2::new(-inner_half_width, -inner_half_height), 0.0),
+        (
+            Vec2::new(inner_half_width, -inner_half_height),
+            std::f32::consts::FRAC_PI_2,
+        ),
+        (
+            Vec2::new(inner_half_width, inner_half_height),
+            std::f32::consts::PI,
+        ),
+        (
+            Vec2::new(-inner_half_width, inner_half_height),
+            -std::f32::consts::FRAC_PI_2,
+        ),
+    ];
+    for (pos, rotation) in corner_triangles {
+        commands.spawn((
+            Mesh2d(corner_triangle_mesh.clone()),
+            MeshMaterial2d(corner_triangle_material.clone()),
+            Transform::from_xyz(pos.x, pos.y, CORNER_TRIANGLE_Z)
+                .with_rotation(Quat::from_rotation_z(rotation))
+                .with_scale(Vec3::new(CORNER_TRIANGLE_SIZE, CORNER_TRIANGLE_SIZE, 1.0)),
+            DespawnOnExit(AppState::AirHockey),
+        ));
+    }
 
     commands.spawn((
         Sprite::from_color(
@@ -757,6 +796,7 @@ fn clamp_mallet_pos(side: PlayerSide, mut pos: Vec2) -> Vec2 {
             pos.y = pos.y.clamp(MALLET_RADIUS, half_height);
         }
     }
+    apply_corner_clamp(&mut pos, MALLET_RADIUS);
     pos
 }
 
@@ -836,6 +876,10 @@ fn move_puck(
         }
     }
 
+    if bounce_off_corners(&mut pos, &mut velocity.0, PUCK_RADIUS) {
+        had_impact = true;
+    }
+
     let puck_end = pos;
     let min_dist = MALLET_RADIUS + PUCK_RADIUS;
     let mut best_hit: Option<SweptMalletHit> = None;
@@ -893,6 +937,67 @@ fn clamp_vec2_length(vec: Vec2, max: f32) -> Vec2 {
     } else {
         vec
     }
+}
+
+#[derive(Clone, Copy)]
+struct CornerBarrier {
+    normal: Vec2,
+    point: Vec2,
+}
+
+fn corner_barriers() -> [CornerBarrier; 4] {
+    let half_width = BOARD_WIDTH * 0.5;
+    let half_height = BOARD_HEIGHT * 0.5;
+    let left = -half_width;
+    let right = half_width;
+    let bottom = -half_height;
+    let top = half_height;
+    let size = CORNER_TRIANGLE_SIZE;
+    let inner_offset = WALL_INNER_OFFSET;
+
+    [
+        CornerBarrier {
+            normal: Vec2::new(1.0, 1.0).normalize_or_zero(),
+            point: Vec2::new(left + inner_offset + size, bottom + inner_offset),
+        },
+        CornerBarrier {
+            normal: Vec2::new(-1.0, 1.0).normalize_or_zero(),
+            point: Vec2::new(right - inner_offset - size, bottom + inner_offset),
+        },
+        CornerBarrier {
+            normal: Vec2::new(1.0, -1.0).normalize_or_zero(),
+            point: Vec2::new(left + inner_offset + size, top - inner_offset),
+        },
+        CornerBarrier {
+            normal: Vec2::new(-1.0, -1.0).normalize_or_zero(),
+            point: Vec2::new(right - inner_offset - size, top - inner_offset),
+        },
+    ]
+}
+
+fn apply_corner_clamp(pos: &mut Vec2, radius: f32) {
+    for barrier in corner_barriers() {
+        let dist = barrier.normal.dot(*pos - barrier.point);
+        if dist < radius {
+            *pos += barrier.normal * (radius - dist);
+        }
+    }
+}
+
+fn bounce_off_corners(pos: &mut Vec2, velocity: &mut Vec2, radius: f32) -> bool {
+    let mut hit = false;
+    for barrier in corner_barriers() {
+        let dist = barrier.normal.dot(*pos - barrier.point);
+        if dist < radius {
+            *pos += barrier.normal * (radius - dist);
+            let vel_dot = velocity.dot(barrier.normal);
+            if vel_dot < 0.0 {
+                *velocity -= 2.0 * vel_dot * barrier.normal;
+                hit = true;
+            }
+        }
+    }
+    hit
 }
 
 #[derive(Clone, Copy)]
