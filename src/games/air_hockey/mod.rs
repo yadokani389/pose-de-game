@@ -50,6 +50,22 @@ const RIGHT_HAND_KEYPOINT: usize = 10;
 const SCORE_FONT_SIZE: f32 = 48.0;
 const SCORE_EDGE_MARGIN: f32 = 20.0;
 const KEYMAP_FONT_SIZE: f32 = 20.0;
+const WIN_SCORE: u32 = 10;
+
+const RESULT_HEADER_SIZE: f32 = 52.0;
+const RESULT_TITLE_SIZE: f32 = 44.0;
+const RESULT_DETAIL_SIZE: f32 = 24.0;
+const RESULT_SCORE_SIZE: f32 = 32.0;
+const RESULT_BUTTON_WIDTH: f32 = 320.0;
+const RESULT_BUTTON_HEIGHT: f32 = 72.0;
+const RESULT_BUTTON_TEXT_SIZE: f32 = 28.0;
+const RESULT_BUTTON_TEXT_SIZE_SECONDARY: f32 = 24.0;
+const RESULT_OVERLAY_COLOR: Color = Color::srgba(0.02, 0.02, 0.05, 0.85);
+const RESULT_HEADER_COLOR: Color = Color::srgb(0.85, 0.9, 1.0);
+const RESULT_DETAIL_COLOR: Color = Color::srgb(0.8, 0.8, 0.85);
+const RESULT_BUTTON_NORMAL: Color = Color::srgb(0.15, 0.15, 0.15);
+const RESULT_BUTTON_HOVERED: Color = Color::srgb(0.25, 0.25, 0.25);
+const RESULT_BUTTON_PRESSED: Color = Color::srgb(0.35, 0.35, 0.35);
 
 pub struct AirHockeyPlugin;
 
@@ -59,6 +75,7 @@ impl Plugin for AirHockeyPlugin {
             .init_resource::<MalletTargets>()
             .init_resource::<CameraOverlayState>()
             .init_resource::<HandSelection>()
+            .init_resource::<AirHockeyPhase>()
             .add_systems(
                 OnEnter(AppState::AirHockey),
                 (setup, enable_pose_runtime, enable_pose_frame_capture),
@@ -75,14 +92,17 @@ impl Plugin for AirHockeyPlugin {
                 Update,
                 (
                     handle_escape_to_menu,
-                    handle_overlay_toggle,
-                    handle_hand_toggle,
+                    handle_overlay_toggle.run_if(is_playing),
+                    handle_hand_toggle.run_if(is_playing),
                     update_viewports,
                     update_camera_overlay,
-                    update_mallet_targets,
-                    move_mallets,
-                    move_puck,
+                    update_mallet_targets.run_if(is_playing),
+                    move_mallets.run_if(is_playing),
+                    move_puck.run_if(is_playing),
                     update_score_text,
+                    spawn_result_ui.run_if(is_result),
+                    result_input.run_if(is_result),
+                    button_system.run_if(is_result),
                 )
                     .run_if(in_state(AppState::AirHockey)),
             );
@@ -153,6 +173,15 @@ impl MalletKinematics {
 
         self.velocity = clamp_vec2_length(avg, MALLET_MAX_SPEED);
     }
+
+    fn reset(&mut self, pos: Vec2) {
+        self.prev_pos = pos;
+        self.curr_pos = pos;
+        self.velocity = Vec2::ZERO;
+        self.samples = [Vec2::ZERO; MALLET_VELOCITY_SAMPLES];
+        self.sample_index = 0;
+        self.sample_count = 0;
+    }
 }
 
 #[derive(Component)]
@@ -180,6 +209,20 @@ struct ScoreCamera;
 struct Scoreboard {
     left: u32,
     right: u32,
+}
+
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum AirHockeyPhase {
+    #[default]
+    Playing,
+    Result,
+}
+
+#[derive(Resource, Clone, Copy, Debug)]
+struct AirHockeyResult {
+    winner: PlayerSide,
+    left_score: u32,
+    right_score: u32,
 }
 
 #[derive(Resource, Debug, Clone, Copy)]
@@ -236,6 +279,15 @@ struct ScoreText;
 #[derive(Component)]
 struct KeymapText;
 
+#[derive(Component)]
+struct ResultRoot;
+
+#[derive(Component)]
+struct RetryButton;
+
+#[derive(Component)]
+struct MenuButton;
+
 #[derive(Resource)]
 struct CameraOverlayImageHandle(Handle<Image>);
 
@@ -249,6 +301,7 @@ fn setup(
     mut latest_frame: ResMut<LatestFrameRes>,
     mut overlay_state: ResMut<CameraOverlayState>,
     mut hand_selection: ResMut<HandSelection>,
+    mut phase: ResMut<AirHockeyPhase>,
 ) {
     scoreboard.left = 0;
     scoreboard.right = 0;
@@ -256,6 +309,8 @@ fn setup(
     overlay_state.visible = true;
     hand_selection.left = HandPreference::Right;
     hand_selection.right = HandPreference::Right;
+    *phase = AirHockeyPhase::Playing;
+    commands.remove_resource::<AirHockeyResult>();
 
     let projection = Projection::Orthographic(OrthographicProjection {
         scaling_mode: ScalingMode::FixedHorizontal {
@@ -820,8 +875,10 @@ fn move_mallets(
 fn move_puck(
     time: Res<Time>,
     mut puck_query: Query<(&mut Transform, &mut Velocity), With<Puck>>,
-    mallets: Query<(&Mallet, &MalletKinematics), Without<Puck>>,
+    mallets: Query<&MalletKinematics, Without<Puck>>,
     mut scoreboard: ResMut<Scoreboard>,
+    mut phase: ResMut<AirHockeyPhase>,
+    mut commands: Commands,
 ) {
     let Some((mut transform, mut velocity)) = puck_query.iter_mut().next() else {
         return;
@@ -859,8 +916,23 @@ fn move_puck(
             had_impact = true;
         } else {
             scoreboard.left = scoreboard.left.saturating_add(1);
-            reset_puck(&mut pos, &mut velocity.0, PlayerSide::Left);
-            puck_start = pos;
+            if scoreboard.left >= WIN_SCORE {
+                apply_result(
+                    &mut commands,
+                    &mut phase,
+                    &mut velocity.0,
+                    &mut pos,
+                    PlayerSide::Left,
+                    scoreboard.left,
+                    scoreboard.right,
+                );
+                transform.translation.x = pos.x;
+                transform.translation.y = pos.y;
+                return;
+            } else {
+                reset_puck(&mut pos, &mut velocity.0, PlayerSide::Left);
+                puck_start = pos;
+            }
         }
     }
 
@@ -871,8 +943,23 @@ fn move_puck(
             had_impact = true;
         } else {
             scoreboard.right = scoreboard.right.saturating_add(1);
-            reset_puck(&mut pos, &mut velocity.0, PlayerSide::Right);
-            puck_start = pos;
+            if scoreboard.right >= WIN_SCORE {
+                apply_result(
+                    &mut commands,
+                    &mut phase,
+                    &mut velocity.0,
+                    &mut pos,
+                    PlayerSide::Right,
+                    scoreboard.left,
+                    scoreboard.right,
+                );
+                transform.translation.x = pos.x;
+                transform.translation.y = pos.y;
+                return;
+            } else {
+                reset_puck(&mut pos, &mut velocity.0, PlayerSide::Right);
+                puck_start = pos;
+            }
         }
     }
 
@@ -883,7 +970,7 @@ fn move_puck(
     let puck_end = pos;
     let min_dist = MALLET_RADIUS + PUCK_RADIUS;
     let mut best_hit: Option<SweptMalletHit> = None;
-    for (mallet, kinematics) in mallets.iter() {
+    for kinematics in mallets {
         let mallet_start = kinematics.prev_pos;
         let mallet_end = kinematics.curr_pos;
         if let Some(hit) =
@@ -893,7 +980,6 @@ fn move_puck(
                 t: hit.t,
                 normal: hit.normal,
                 mallet_pos: hit.mallet_pos,
-                side: mallet.side,
                 velocity: kinematics.velocity,
             };
             if best_hit.is_none_or(|best| entry.t < best.t) {
@@ -910,10 +996,12 @@ fn move_puck(
             let reflected = relative - (1.0 + MALLET_RESTITUTION) * rel_dot * hit.normal;
             velocity.0 = reflected + hit.velocity;
             had_impact = true;
-            if hit.side == PlayerSide::Left {
-                velocity.0.y = velocity.0.y.max(0.0);
-            } else {
+            if hit.normal.y.abs() < SWEEP_EPS {
+                // keep as-is when the normal is nearly horizontal
+            } else if hit.normal.y < 0.0 {
                 velocity.0.y = velocity.0.y.min(0.0);
+            } else {
+                velocity.0.y = velocity.0.y.max(0.0);
             }
         }
     }
@@ -1012,7 +1100,6 @@ struct SweptMalletHit {
     t: f32,
     normal: Vec2,
     mallet_pos: Vec2,
-    side: PlayerSide,
     velocity: Vec2,
 }
 
@@ -1095,6 +1182,25 @@ fn reset_puck(pos: &mut Vec2, velocity: &mut Vec2, scorer: PlayerSide) {
     *velocity = Vec2::ZERO;
 }
 
+fn apply_result(
+    commands: &mut Commands,
+    phase: &mut ResMut<AirHockeyPhase>,
+    velocity: &mut Vec2,
+    pos: &mut Vec2,
+    winner: PlayerSide,
+    left_score: u32,
+    right_score: u32,
+) {
+    **phase = AirHockeyPhase::Result;
+    *velocity = Vec2::ZERO;
+    *pos = Vec2::ZERO;
+    commands.insert_resource(AirHockeyResult {
+        winner,
+        left_score,
+        right_score,
+    });
+}
+
 fn update_score_text(scoreboard: Res<Scoreboard>, mut query: Query<&mut Text2d, With<ScoreText>>) {
     if !scoreboard.is_changed() {
         return;
@@ -1102,6 +1208,290 @@ fn update_score_text(scoreboard: Res<Scoreboard>, mut query: Query<&mut Text2d, 
     if let Some(mut text) = query.iter_mut().next() {
         *text = Text2d::new(format!("{} - {}", scoreboard.left, scoreboard.right));
     }
+}
+
+fn spawn_result_ui(
+    mut commands: Commands,
+    ui_font: Res<UiFont>,
+    result: Option<Res<AirHockeyResult>>,
+    existing: Query<Entity, With<ResultRoot>>,
+) {
+    if !existing.is_empty() {
+        return;
+    }
+    let Some(result) = result else {
+        return;
+    };
+
+    let (title, title_color) = match result.winner {
+        PlayerSide::Left => ("LEFT WIN", Color::srgb(0.4, 0.6, 1.0)),
+        PlayerSide::Right => ("RIGHT WIN", Color::srgb(1.0, 0.5, 0.3)),
+    };
+
+    let detail = format!("First to {}", WIN_SCORE);
+    let score_text = format!("{} - {}", result.left_score, result.right_score);
+
+    commands
+        .spawn((
+            ResultRoot,
+            DespawnOnExit(AppState::AirHockey),
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            BackgroundColor(RESULT_OVERLAY_COLOR),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                ResultRoot,
+                Text::new("FINISH!"),
+                TextFont {
+                    font: ui_font.0.clone(),
+                    font_size: RESULT_HEADER_SIZE,
+                    ..default()
+                },
+                TextColor(RESULT_HEADER_COLOR),
+                Node {
+                    margin: UiRect::bottom(Val::Px(18.0)),
+                    ..default()
+                },
+            ));
+
+            parent.spawn((
+                ResultRoot,
+                Text::new(title),
+                TextFont {
+                    font: ui_font.0.clone(),
+                    font_size: RESULT_TITLE_SIZE,
+                    ..default()
+                },
+                TextColor(title_color),
+                Node {
+                    margin: UiRect::bottom(Val::Px(12.0)),
+                    ..default()
+                },
+            ));
+
+            parent.spawn((
+                ResultRoot,
+                Text::new(detail),
+                TextFont {
+                    font: ui_font.0.clone(),
+                    font_size: RESULT_DETAIL_SIZE,
+                    ..default()
+                },
+                TextColor(RESULT_DETAIL_COLOR),
+                Node {
+                    margin: UiRect::bottom(Val::Px(12.0)),
+                    ..default()
+                },
+            ));
+
+            parent.spawn((
+                ResultRoot,
+                Text::new(score_text),
+                TextFont {
+                    font: ui_font.0.clone(),
+                    font_size: RESULT_SCORE_SIZE,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.92, 0.92, 0.96)),
+                Node {
+                    margin: UiRect::bottom(Val::Px(28.0)),
+                    ..default()
+                },
+            ));
+
+            parent
+                .spawn((
+                    ResultRoot,
+                    Button,
+                    RetryButton,
+                    Node {
+                        width: Val::Px(RESULT_BUTTON_WIDTH),
+                        height: Val::Px(RESULT_BUTTON_HEIGHT),
+                        border: UiRect::all(Val::Px(3.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BorderColor::all(Color::BLACK),
+                    BorderRadius::MAX,
+                    BackgroundColor(RESULT_BUTTON_NORMAL),
+                ))
+                .with_children(|button| {
+                    button.spawn((
+                        ResultRoot,
+                        Text::new("Retry"),
+                        TextFont {
+                            font: ui_font.0.clone(),
+                            font_size: RESULT_BUTTON_TEXT_SIZE,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                    ));
+                });
+
+            parent
+                .spawn((
+                    ResultRoot,
+                    Button,
+                    MenuButton,
+                    Node {
+                        width: Val::Px(RESULT_BUTTON_WIDTH),
+                        height: Val::Px(RESULT_BUTTON_HEIGHT),
+                        border: UiRect::all(Val::Px(3.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::top(Val::Px(16.0)),
+                        ..default()
+                    },
+                    BorderColor::all(Color::BLACK),
+                    BorderRadius::MAX,
+                    BackgroundColor(RESULT_BUTTON_NORMAL),
+                ))
+                .with_children(|button| {
+                    button.spawn((
+                        ResultRoot,
+                        Text::new("Back to Menu"),
+                        TextFont {
+                            font: ui_font.0.clone(),
+                            font_size: RESULT_BUTTON_TEXT_SIZE_SECONDARY,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                    ));
+                });
+        });
+}
+
+fn result_input(
+    input: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut phase: ResMut<AirHockeyPhase>,
+    mut scoreboard: ResMut<Scoreboard>,
+    mut targets: ResMut<MalletTargets>,
+    mut queries: ParamSet<(
+        Query<(&Mallet, &mut Transform, &mut MalletKinematics)>,
+        Query<(&mut Transform, &mut Velocity), With<Puck>>,
+    )>,
+    result_ui: Query<Entity, With<ResultRoot>>,
+) {
+    if input.just_pressed(KeyCode::Space) {
+        for entity in &result_ui {
+            commands.entity(entity).despawn();
+        }
+        reset_match(
+            &mut commands,
+            &mut phase,
+            &mut scoreboard,
+            &mut targets,
+            &mut queries,
+        );
+    }
+}
+
+fn button_system(
+    mut query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            Option<&RetryButton>,
+            Option<&MenuButton>,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut next_state: ResMut<NextState<AppState>>,
+    mut phase: ResMut<AirHockeyPhase>,
+    mut commands: Commands,
+    mut scoreboard: ResMut<Scoreboard>,
+    mut targets: ResMut<MalletTargets>,
+    mut queries: ParamSet<(
+        Query<(&Mallet, &mut Transform, &mut MalletKinematics)>,
+        Query<(&mut Transform, &mut Velocity), With<Puck>>,
+    )>,
+    result_ui: Query<Entity, With<ResultRoot>>,
+) {
+    for (interaction, mut color, mut border_color, retry, menu) in &mut query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = RESULT_BUTTON_PRESSED.into();
+                border_color.set_all(Color::srgb(0.9, 0.9, 0.9));
+                if retry.is_some() {
+                    for entity in &result_ui {
+                        commands.entity(entity).despawn();
+                    }
+                    reset_match(
+                        &mut commands,
+                        &mut phase,
+                        &mut scoreboard,
+                        &mut targets,
+                        &mut queries,
+                    );
+                } else if menu.is_some() {
+                    next_state.set(AppState::MainMenu);
+                }
+            }
+            Interaction::Hovered => {
+                *color = RESULT_BUTTON_HOVERED.into();
+                border_color.set_all(Color::WHITE);
+            }
+            Interaction::None => {
+                *color = RESULT_BUTTON_NORMAL.into();
+                border_color.set_all(Color::BLACK);
+            }
+        }
+    }
+}
+
+fn reset_match(
+    commands: &mut Commands,
+    phase: &mut ResMut<AirHockeyPhase>,
+    scoreboard: &mut ResMut<Scoreboard>,
+    targets: &mut ResMut<MalletTargets>,
+    queries: &mut ParamSet<(
+        Query<(&Mallet, &mut Transform, &mut MalletKinematics)>,
+        Query<(&mut Transform, &mut Velocity), With<Puck>>,
+    )>,
+) {
+    **phase = AirHockeyPhase::Playing;
+    commands.remove_resource::<AirHockeyResult>();
+    scoreboard.left = 0;
+    scoreboard.right = 0;
+    **targets = MalletTargets::default();
+
+    let left_mallet_pos = Vec2::new(0.0, -BOARD_HEIGHT * 0.25);
+    let right_mallet_pos = Vec2::new(0.0, BOARD_HEIGHT * 0.25);
+    let mut mallets = queries.p0();
+    for (mallet, mut transform, mut kinematics) in mallets.iter_mut() {
+        let pos = match mallet.side {
+            PlayerSide::Left => left_mallet_pos,
+            PlayerSide::Right => right_mallet_pos,
+        };
+        transform.translation.x = pos.x;
+        transform.translation.y = pos.y;
+        kinematics.reset(pos);
+    }
+
+    let mut puck = queries.p1();
+    if let Some((mut transform, mut velocity)) = puck.iter_mut().next() {
+        transform.translation.x = 0.0;
+        transform.translation.y = 0.0;
+        velocity.0 = Vec2::ZERO;
+    }
+}
+
+fn is_playing(phase: Option<Res<AirHockeyPhase>>) -> bool {
+    matches!(phase.as_deref(), Some(AirHockeyPhase::Playing))
+}
+
+fn is_result(phase: Option<Res<AirHockeyPhase>>) -> bool {
+    matches!(phase.as_deref(), Some(AirHockeyPhase::Result))
 }
 
 fn update_score_ui_positions(
