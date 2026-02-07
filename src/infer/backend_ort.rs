@@ -5,6 +5,9 @@ use ort::{
     value::Tensor,
 };
 
+#[cfg(feature = "coreml")]
+use ort::execution_providers::CoreMLExecutionProvider;
+
 use crate::infer::preprocess::PreprocessedInput;
 use crate::infer::{ModelData, PoseSegBackend, RawOutput, SegRawOutput};
 
@@ -27,6 +30,11 @@ impl OrtBackend {
         input_size: u32,
         require_cuda: bool,
     ) -> Result<Self> {
+        #[cfg(feature = "coreml")]
+        let coreml = CoreMLExecutionProvider::default();
+        #[cfg(feature = "coreml")]
+        let coreml_available = coreml.is_available().unwrap_or(false);
+
         let cuda = CUDAExecutionProvider::default();
         let cuda_available = cuda
             .is_available()
@@ -38,13 +46,29 @@ impl OrtBackend {
             ));
         }
 
-        let (pose, cuda_enabled_pose) =
-            Self::build_session(pose, &cuda, cuda_available, require_cuda)?;
-        let (seg, cuda_enabled_seg) =
-            Self::build_session(seg, &cuda, cuda_available, require_cuda)?;
+        let (pose, ep_name_pose) = Self::build_session(
+            pose,
+            #[cfg(feature = "coreml")]
+            &coreml,
+            #[cfg(feature = "coreml")]
+            coreml_available,
+            &cuda,
+            cuda_available,
+            require_cuda,
+        )?;
+        let (seg, ep_name_seg) = Self::build_session(
+            seg,
+            #[cfg(feature = "coreml")]
+            &coreml,
+            #[cfg(feature = "coreml")]
+            coreml_available,
+            &cuda,
+            cuda_available,
+            require_cuda,
+        )?;
 
-        if cuda_enabled_pose || cuda_enabled_seg {
-            println!("CUDA execution provider enabled.");
+        if let Some(name) = ep_name_pose.or(ep_name_seg) {
+            println!("{} execution provider enabled.", name);
         }
 
         Ok(Self {
@@ -56,16 +80,32 @@ impl OrtBackend {
 
     fn build_session(
         model: &ModelData,
+        #[cfg(feature = "coreml")] coreml: &CoreMLExecutionProvider,
+        #[cfg(feature = "coreml")] coreml_available: bool,
         cuda: &CUDAExecutionProvider,
         cuda_available: bool,
         require_cuda: bool,
-    ) -> Result<(OrtSession, bool)> {
+    ) -> Result<(OrtSession, Option<&'static str>)> {
         let mut builder = Session::builder()?;
-        let mut cuda_enabled = false;
-        if cuda_available {
+        let mut ep_enabled: Option<&'static str> = None;
+
+        #[cfg(feature = "coreml")]
+        if coreml_available && !require_cuda {
+            match coreml.register(&mut builder) {
+                Ok(()) => {
+                    ep_enabled = Some("CoreML");
+                }
+                Err(err) => {
+                    eprintln!("Failed to register CoreML execution provider: {err}");
+                    eprintln!("Falling back to other providers.");
+                }
+            }
+        }
+
+        if ep_enabled.is_none() && cuda_available {
             match cuda.register(&mut builder) {
                 Ok(()) => {
-                    cuda_enabled = true;
+                    ep_enabled = Some("CUDA");
                 }
                 Err(err) => {
                     if require_cuda {
@@ -75,8 +115,8 @@ impl OrtBackend {
                     eprintln!("Falling back to CPU.");
                 }
             }
-        } else {
-            eprintln!("CUDA execution provider is not available; falling back to CPU.");
+        } else if ep_enabled.is_none() && !cuda_available && !require_cuda {
+            eprintln!("No hardware acceleration available; using CPU.");
         }
 
         let session = builder
@@ -84,15 +124,15 @@ impl OrtBackend {
             .with_context(|| format!("failed to open model ({})", model.label()))?;
 
         let input_name = session
-            .inputs
+            .inputs()
             .first()
             .context("missing model input")?
-            .name
+            .name()
             .to_string();
         let output_names = session
-            .outputs
+            .outputs()
             .iter()
-            .map(|out| out.name.to_string())
+            .map(|out| out.name().to_string())
             .collect::<Vec<_>>();
 
         Ok((
@@ -101,7 +141,7 @@ impl OrtBackend {
                 input_name,
                 output_names,
             },
-            cuda_enabled,
+            ep_enabled,
         ))
     }
 

@@ -144,6 +144,7 @@
                     # for detect
                     openssl
                     (onnxruntime.override { inherit cudaSupport; })
+                    stdenv.cc.cc.lib
                   ]
                   + (lib.optionalString openvinoSupport ":${openvino}/runtime/lib/intel64")
                 );
