@@ -41,6 +41,7 @@ struct MenuSelection {
 enum MenuAction {
     StartAirHockey,
     StartFlagRaise,
+    StartPoseSync,
     StartPoseDebug,
 }
 
@@ -75,11 +76,11 @@ const MENU_ENTRIES: &[MenuEntry] = &[
         action: Some(MenuAction::StartPoseDebug),
     },
     MenuEntry {
-        title: "Coming Soon 02",
-        badge: "SOON",
-        summary: "新しいゲーム準備中",
-        status: "準備中",
-        action: None,
+        title: "ポーズシンクロ",
+        badge: "PLAY",
+        summary: "見本ポーズを覚えて再現",
+        status: "利用可",
+        action: Some(MenuAction::StartPoseSync),
     },
     MenuEntry {
         title: "Coming Soon 03",
@@ -304,6 +305,7 @@ fn apply_action(action: MenuAction, next_state: &mut NextState<AppState>) {
     match action {
         MenuAction::StartAirHockey => next_state.set(AppState::AirHockey),
         MenuAction::StartFlagRaise => next_state.set(AppState::FlagRaise),
+        MenuAction::StartPoseSync => next_state.set(AppState::PoseSync),
         MenuAction::StartPoseDebug => next_state.set(AppState::PoseDebug),
     }
 }
