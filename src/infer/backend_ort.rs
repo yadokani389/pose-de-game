@@ -95,7 +95,7 @@ impl OrtBackend {
         #[cfg(feature = "coreml")]
         if coreml_available && !require_cuda {
             let coreml_configured =
-                CoreMLExecutionProvider::default().with_compute_units(CoreMLComputeUnits::CPUOnly);
+                CoreMLExecutionProvider::default().with_compute_units(CoreMLComputeUnits::CPUOnly); // CPUOnly or All
             match coreml_configured.register(&mut builder) {
                 Ok(()) => {
                     ep_enabled = Some("CoreML");
