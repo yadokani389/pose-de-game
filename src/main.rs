@@ -19,6 +19,7 @@ pub enum AppState {
     MainMenu,
     AirHockey,
     FlagRaise,
+    PoseSync,
     PoseDebug,
 }
 
@@ -50,6 +51,7 @@ fn main() {
         menu::GameMenuPlugin,
         games::air_hockey::AirHockeyPlugin,
         games::flag_raise::FlagRaisePlugin,
+        games::pose_sync::PoseSyncPlugin,
         games::pose_debug::PoseDebugPlugin,
     ))
     .add_systems(Startup, utils::pitch::setup_beeps)
