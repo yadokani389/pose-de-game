@@ -8,6 +8,9 @@ use ort::{
 #[cfg(feature = "coreml")]
 use ort::execution_providers::CoreMLExecutionProvider;
 
+#[cfg(feature = "coreml")]
+use ort::execution_providers::coreml::ComputeUnits as CoreMLComputeUnits;
+
 use crate::infer::preprocess::PreprocessedInput;
 use crate::infer::{ModelData, PoseSegBackend, RawOutput, SegRawOutput};
 
@@ -91,7 +94,9 @@ impl OrtBackend {
 
         #[cfg(feature = "coreml")]
         if coreml_available && !require_cuda {
-            match coreml.register(&mut builder) {
+            let coreml_configured =
+                CoreMLExecutionProvider::default().with_compute_units(CoreMLComputeUnits::CPUOnly);
+            match coreml_configured.register(&mut builder) {
                 Ok(()) => {
                     ep_enabled = Some("CoreML");
                 }
