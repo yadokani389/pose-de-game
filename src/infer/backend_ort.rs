@@ -83,7 +83,7 @@ impl OrtBackend {
 
     fn build_session(
         model: &ModelData,
-        #[cfg(feature = "coreml")] coreml: &CoreMLExecutionProvider,
+        #[cfg(feature = "coreml")] _coreml: &CoreMLExecutionProvider,
         #[cfg(feature = "coreml")] coreml_available: bool,
         cuda: &CUDAExecutionProvider,
         cuda_available: bool,

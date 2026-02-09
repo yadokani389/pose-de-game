@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{AppState, assets::UiFont};
 
 use super::game::{
-    ComboState, FruitCutEntity, FruitCutPhase, FruitSpawner, GameResult, GameTimer, HandSelection,
+    ComboState, FruitCutEntity, FruitCutPhase, FruitSpawner, GameResult, GameTimer, PlayerSide,
     Scoreboard,
 };
 use super::hand_tracker::HandTrackers;
@@ -45,172 +45,483 @@ pub fn spawn_result_ui(
         return;
     };
 
-    let accuracy = if result.total_sliced + result.total_missed > 0 {
-        (result.total_sliced as f32 / (result.total_sliced + result.total_missed) as f32) * 100.0
+    if result.player_count == 1 {
+        let accuracy = if result.left_total_sliced + result.left_total_missed > 0 {
+            (result.left_total_sliced as f32
+                / (result.left_total_sliced + result.left_total_missed) as f32)
+                * 100.0
+        } else {
+            0.0
+        };
+
+        commands
+            .spawn((
+                ResultRoot,
+                FruitCutEntity,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                BackgroundColor(RESULT_OVERLAY_COLOR),
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Text::new("GAME OVER!"),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_HEADER_SIZE,
+                        ..default()
+                    },
+                    TextColor(RESULT_HEADER_COLOR),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(24.0)),
+                        ..default()
+                    },
+                ));
+
+                parent.spawn((
+                    Text::new(format!("Score: {}", result.left_score)),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_TITLE_SIZE,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(1.0, 0.9, 0.3)),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(32.0)),
+                        ..default()
+                    },
+                ));
+
+                parent.spawn((
+                    Text::new(format!("Fruits Sliced: {}", result.left_total_sliced)),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_DETAIL_SIZE,
+                        ..default()
+                    },
+                    TextColor(RESULT_DETAIL_COLOR),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                ));
+
+                parent.spawn((
+                    Text::new(format!("Max Combo: {}", result.left_max_combo)),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_DETAIL_SIZE,
+                        ..default()
+                    },
+                    TextColor(RESULT_DETAIL_COLOR),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                ));
+
+                parent.spawn((
+                    Text::new(format!("Accuracy: {:.1}%", accuracy)),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_DETAIL_SIZE,
+                        ..default()
+                    },
+                    TextColor(RESULT_DETAIL_COLOR),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                ));
+
+                parent.spawn((
+                    Text::new(format!("Bombs Hit: {}", result.left_bombs_hit)),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_DETAIL_SIZE,
+                        ..default()
+                    },
+                    TextColor(if result.left_bombs_hit > 0 {
+                        Color::srgb(1.0, 0.4, 0.4)
+                    } else {
+                        RESULT_DETAIL_COLOR
+                    }),
+                    Node {
+                        margin: UiRect::bottom(Val::Px(32.0)),
+                        ..default()
+                    },
+                ));
+
+                parent
+                    .spawn((
+                        Button,
+                        RetryButton,
+                        Node {
+                            width: Val::Px(RESULT_BUTTON_WIDTH),
+                            height: Val::Px(RESULT_BUTTON_HEIGHT),
+                            border: UiRect::all(Val::Px(3.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        BorderColor::all(Color::BLACK),
+                        BorderRadius::MAX,
+                        BackgroundColor(RESULT_BUTTON_NORMAL),
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            Text::new("Retry"),
+                            TextFont {
+                                font: ui_font.0.clone(),
+                                font_size: RESULT_BUTTON_TEXT_SIZE,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                        ));
+                    });
+
+                parent
+                    .spawn((
+                        Button,
+                        MenuButton,
+                        Node {
+                            width: Val::Px(RESULT_BUTTON_WIDTH),
+                            height: Val::Px(RESULT_BUTTON_HEIGHT),
+                            border: UiRect::all(Val::Px(3.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::top(Val::Px(16.0)),
+                            ..default()
+                        },
+                        BorderColor::all(Color::BLACK),
+                        BorderRadius::MAX,
+                        BackgroundColor(RESULT_BUTTON_NORMAL),
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            Text::new("Back to Menu"),
+                            TextFont {
+                                font: ui_font.0.clone(),
+                                font_size: RESULT_BUTTON_TEXT_SIZE_SECONDARY,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                        ));
+                    });
+            });
     } else {
-        0.0
-    };
+        let left_accuracy = if result.left_total_sliced + result.left_total_missed > 0 {
+            (result.left_total_sliced as f32
+                / (result.left_total_sliced + result.left_total_missed) as f32)
+                * 100.0
+        } else {
+            0.0
+        };
+        let right_accuracy = if result.right_total_sliced + result.right_total_missed > 0 {
+            (result.right_total_sliced as f32
+                / (result.right_total_sliced + result.right_total_missed) as f32)
+                * 100.0
+        } else {
+            0.0
+        };
 
-    commands
-        .spawn((
-            ResultRoot,
-            FruitCutEntity,
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            BackgroundColor(RESULT_OVERLAY_COLOR),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("GAME OVER!"),
-                TextFont {
-                    font: ui_font.0.clone(),
-                    font_size: RESULT_HEADER_SIZE,
-                    ..default()
-                },
-                TextColor(RESULT_HEADER_COLOR),
+        commands
+            .spawn((
+                ResultRoot,
+                FruitCutEntity,
                 Node {
-                    margin: UiRect::bottom(Val::Px(24.0)),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                     ..default()
                 },
-            ));
+                BackgroundColor(RESULT_OVERLAY_COLOR),
+            ))
+            .with_children(|parent| {
+                let winner_text = match result.winner {
+                    Some(PlayerSide::Left) => "PLAYER 1 WINS!",
+                    Some(PlayerSide::Right) => "PLAYER 2 WINS!",
+                    None => "TIE!",
+                };
+                let winner_color = match result.winner {
+                    Some(PlayerSide::Left) => Color::srgb(0.3, 0.6, 1.0),
+                    Some(PlayerSide::Right) => Color::srgb(1.0, 0.3, 0.4),
+                    None => Color::srgb(0.9, 0.9, 0.3),
+                };
 
-            parent.spawn((
-                Text::new(format!("Score: {}", result.final_score)),
-                TextFont {
-                    font: ui_font.0.clone(),
-                    font_size: RESULT_TITLE_SIZE,
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 0.9, 0.3)),
-                Node {
-                    margin: UiRect::bottom(Val::Px(32.0)),
-                    ..default()
-                },
-            ));
-
-            parent.spawn((
-                Text::new(format!("Fruits Sliced: {}", result.total_sliced)),
-                TextFont {
-                    font: ui_font.0.clone(),
-                    font_size: RESULT_DETAIL_SIZE,
-                    ..default()
-                },
-                TextColor(RESULT_DETAIL_COLOR),
-                Node {
-                    margin: UiRect::bottom(Val::Px(8.0)),
-                    ..default()
-                },
-            ));
-
-            parent.spawn((
-                Text::new(format!("Max Combo: {}", result.max_combo)),
-                TextFont {
-                    font: ui_font.0.clone(),
-                    font_size: RESULT_DETAIL_SIZE,
-                    ..default()
-                },
-                TextColor(RESULT_DETAIL_COLOR),
-                Node {
-                    margin: UiRect::bottom(Val::Px(8.0)),
-                    ..default()
-                },
-            ));
-
-            parent.spawn((
-                Text::new(format!("Accuracy: {:.1}%", accuracy)),
-                TextFont {
-                    font: ui_font.0.clone(),
-                    font_size: RESULT_DETAIL_SIZE,
-                    ..default()
-                },
-                TextColor(RESULT_DETAIL_COLOR),
-                Node {
-                    margin: UiRect::bottom(Val::Px(8.0)),
-                    ..default()
-                },
-            ));
-
-            parent.spawn((
-                Text::new(format!("Bombs Hit: {}", result.bombs_hit)),
-                TextFont {
-                    font: ui_font.0.clone(),
-                    font_size: RESULT_DETAIL_SIZE,
-                    ..default()
-                },
-                TextColor(if result.bombs_hit > 0 {
-                    Color::srgb(1.0, 0.4, 0.4)
-                } else {
-                    RESULT_DETAIL_COLOR
-                }),
-                Node {
-                    margin: UiRect::bottom(Val::Px(32.0)),
-                    ..default()
-                },
-            ));
-
-            parent
-                .spawn((
-                    Button,
-                    RetryButton,
-                    Node {
-                        width: Val::Px(RESULT_BUTTON_WIDTH),
-                        height: Val::Px(RESULT_BUTTON_HEIGHT),
-                        border: UiRect::all(Val::Px(3.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
+                parent.spawn((
+                    Text::new(winner_text),
+                    TextFont {
+                        font: ui_font.0.clone(),
+                        font_size: RESULT_HEADER_SIZE,
                         ..default()
                     },
-                    BorderColor::all(Color::BLACK),
-                    BorderRadius::MAX,
-                    BackgroundColor(RESULT_BUTTON_NORMAL),
-                ))
-                .with_children(|button| {
-                    button.spawn((
-                        Text::new("Retry"),
-                        TextFont {
-                            font: ui_font.0.clone(),
-                            font_size: RESULT_BUTTON_TEXT_SIZE,
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                    ));
-                });
-
-            parent
-                .spawn((
-                    Button,
-                    MenuButton,
+                    TextColor(winner_color),
                     Node {
-                        width: Val::Px(RESULT_BUTTON_WIDTH),
-                        height: Val::Px(RESULT_BUTTON_HEIGHT),
-                        border: UiRect::all(Val::Px(3.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        margin: UiRect::top(Val::Px(16.0)),
+                        margin: UiRect::bottom(Val::Px(32.0)),
                         ..default()
                     },
-                    BorderColor::all(Color::BLACK),
-                    BorderRadius::MAX,
-                    BackgroundColor(RESULT_BUTTON_NORMAL),
-                ))
-                .with_children(|button| {
-                    button.spawn((
-                        Text::new("Back to Menu"),
-                        TextFont {
-                            font: ui_font.0.clone(),
-                            font_size: RESULT_BUTTON_TEXT_SIZE_SECONDARY,
+                ));
+
+                parent
+                    .spawn((Node {
+                        width: Val::Percent(80.0),
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceAround,
+                        margin: UiRect::bottom(Val::Px(32.0)),
+                        ..default()
+                    },))
+                    .with_children(|columns| {
+                        columns
+                            .spawn((Node {
+                                flex_direction: FlexDirection::Column,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },))
+                            .with_children(|left_col| {
+                                left_col.spawn((
+                                    Text::new("PLAYER 1"),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_TITLE_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(Color::srgb(0.3, 0.6, 1.0)),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(16.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                left_col.spawn((
+                                    Text::new(format!("Score: {}", result.left_score)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                left_col.spawn((
+                                    Text::new(format!("Sliced: {}", result.left_total_sliced)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                left_col.spawn((
+                                    Text::new(format!("Max Combo: {}", result.left_max_combo)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                left_col.spawn((
+                                    Text::new(format!("Accuracy: {:.1}%", left_accuracy)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                left_col.spawn((
+                                    Text::new(format!("Bombs Hit: {}", result.left_bombs_hit)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(if result.left_bombs_hit > 0 {
+                                        Color::srgb(1.0, 0.4, 0.4)
+                                    } else {
+                                        RESULT_DETAIL_COLOR
+                                    }),
+                                ));
+                            });
+
+                        columns
+                            .spawn((Node {
+                                flex_direction: FlexDirection::Column,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },))
+                            .with_children(|right_col| {
+                                right_col.spawn((
+                                    Text::new("PLAYER 2"),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_TITLE_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(Color::srgb(1.0, 0.3, 0.4)),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(16.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                right_col.spawn((
+                                    Text::new(format!("Score: {}", result.right_score)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                right_col.spawn((
+                                    Text::new(format!("Sliced: {}", result.right_total_sliced)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                right_col.spawn((
+                                    Text::new(format!("Max Combo: {}", result.right_max_combo)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                right_col.spawn((
+                                    Text::new(format!("Accuracy: {:.1}%", right_accuracy)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(RESULT_DETAIL_COLOR),
+                                    Node {
+                                        margin: UiRect::bottom(Val::Px(8.0)),
+                                        ..default()
+                                    },
+                                ));
+
+                                right_col.spawn((
+                                    Text::new(format!("Bombs Hit: {}", result.right_bombs_hit)),
+                                    TextFont {
+                                        font: ui_font.0.clone(),
+                                        font_size: RESULT_DETAIL_SIZE,
+                                        ..default()
+                                    },
+                                    TextColor(if result.right_bombs_hit > 0 {
+                                        Color::srgb(1.0, 0.4, 0.4)
+                                    } else {
+                                        RESULT_DETAIL_COLOR
+                                    }),
+                                ));
+                            });
+                    });
+
+                parent
+                    .spawn((
+                        Button,
+                        RetryButton,
+                        Node {
+                            width: Val::Px(RESULT_BUTTON_WIDTH),
+                            height: Val::Px(RESULT_BUTTON_HEIGHT),
+                            border: UiRect::all(Val::Px(3.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
                             ..default()
                         },
-                        TextColor(Color::srgb(0.9, 0.9, 0.9)),
-                    ));
-                });
-        });
+                        BorderColor::all(Color::BLACK),
+                        BorderRadius::MAX,
+                        BackgroundColor(RESULT_BUTTON_NORMAL),
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            Text::new("Retry"),
+                            TextFont {
+                                font: ui_font.0.clone(),
+                                font_size: RESULT_BUTTON_TEXT_SIZE,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                        ));
+                    });
+
+                parent
+                    .spawn((
+                        Button,
+                        MenuButton,
+                        Node {
+                            width: Val::Px(RESULT_BUTTON_WIDTH),
+                            height: Val::Px(RESULT_BUTTON_HEIGHT),
+                            border: UiRect::all(Val::Px(3.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::top(Val::Px(16.0)),
+                            ..default()
+                        },
+                        BorderColor::all(Color::BLACK),
+                        BorderRadius::MAX,
+                        BackgroundColor(RESULT_BUTTON_NORMAL),
+                    ))
+                    .with_children(|button| {
+                        button.spawn((
+                            Text::new("Back to Menu"),
+                            TextFont {
+                                font: ui_font.0.clone(),
+                                font_size: RESULT_BUTTON_TEXT_SIZE_SECONDARY,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                        ));
+                    });
+            });
+    }
 }
 
 pub fn handle_result_input(
@@ -222,7 +533,6 @@ pub fn handle_result_input(
     mut game_timer: ResMut<GameTimer>,
     mut spawner: ResMut<FruitSpawner>,
     mut hand_trackers: ResMut<HandTrackers>,
-    mut hand_selection: ResMut<HandSelection>,
     result_ui: Query<Entity, With<ResultRoot>>,
 ) {
     if input.just_pressed(KeyCode::Space) {
@@ -237,7 +547,6 @@ pub fn handle_result_input(
             &mut game_timer,
             &mut spawner,
             &mut hand_trackers,
-            &mut hand_selection,
         );
     }
 }
@@ -261,7 +570,6 @@ pub fn button_system(
     mut game_timer: ResMut<GameTimer>,
     mut spawner: ResMut<FruitSpawner>,
     mut hand_trackers: ResMut<HandTrackers>,
-    mut hand_selection: ResMut<HandSelection>,
     result_ui: Query<Entity, With<ResultRoot>>,
 ) {
     for (interaction, mut color, mut border_color, retry, menu) in &mut query {
@@ -282,7 +590,6 @@ pub fn button_system(
                         &mut game_timer,
                         &mut spawner,
                         &mut hand_trackers,
-                        &mut hand_selection,
                     );
                 } else if menu.is_some() {
                     next_state.set(AppState::MainMenu);
@@ -308,7 +615,6 @@ fn reset_game(
     game_timer: &mut ResMut<GameTimer>,
     spawner: &mut ResMut<FruitSpawner>,
     hand_trackers: &mut ResMut<HandTrackers>,
-    hand_selection: &mut ResMut<HandSelection>,
 ) {
     **phase = FruitCutPhase::Setup;
     **scoreboard = Scoreboard::default();
@@ -316,6 +622,5 @@ fn reset_game(
     **game_timer = GameTimer::default();
     **spawner = FruitSpawner::default();
     **hand_trackers = HandTrackers::default();
-    **hand_selection = HandSelection::default();
     commands.remove_resource::<GameResult>();
 }

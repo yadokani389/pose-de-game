@@ -1,6 +1,5 @@
 mod game;
 mod hand_tracker;
-mod input;
 mod render;
 mod result;
 mod setup;
@@ -27,20 +26,6 @@ pub fn game_world_size(window: &Window) -> Vec2 {
     Vec2::new(GAME_WORLD_HEIGHT * aspect, GAME_WORLD_HEIGHT)
 }
 
-pub fn camera_display_size(window: &Window, frame_size: Option<Vec2>) -> Vec2 {
-    let world = game_world_size(window);
-    let world_aspect = world.x / world.y;
-    let frame_aspect = frame_size.map(|s| s.x / s.y).unwrap_or(world_aspect);
-
-    if frame_aspect > world_aspect {
-        let width = world.x;
-        Vec2::new(width, width / frame_aspect)
-    } else {
-        let height = world.y;
-        Vec2::new(height * frame_aspect, height)
-    }
-}
-
 pub fn map_pose_to_world(normalized: Vec2, mapped_size: Vec2) -> Vec2 {
     let nx = normalized
         .x
@@ -58,11 +43,11 @@ pub struct FruitCutPlugin;
 impl Plugin for FruitCutPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<game::FruitCutPhase>()
+            .init_resource::<game::FruitCutSettings>()
             .init_resource::<game::Scoreboard>()
             .init_resource::<game::GameTimer>()
             .init_resource::<game::ComboState>()
             .init_resource::<game::FruitSpawner>()
-            .init_resource::<game::HandSelection>()
             .init_resource::<hand_tracker::HandTrackers>()
             .add_systems(
                 OnEnter(AppState::FruitCut),
@@ -81,14 +66,15 @@ impl Plugin for FruitCutPlugin {
                 Update,
                 (
                     setup::handle_escape_to_menu,
-                    input::handle_hand_toggle,
                     setup::update_camera_overlay,
                     hand_tracker::update_hand_trackers,
+                    setup::handle_setup_input.run_if(setup::is_setup),
                     setup::handle_setup_phase.run_if(setup::is_setup),
                     game::spawn_fruits.run_if(is_playing),
                     game::update_fruits.run_if(is_playing),
                     game::check_fruit_slicing.run_if(is_playing),
                     game::update_game_timer.run_if(is_playing),
+                    game::update_score_popups.run_if(is_playing),
                     render::render_hand_trails,
                     ui::update_hud.run_if(is_playing),
                     result::spawn_result_ui.run_if(is_result),

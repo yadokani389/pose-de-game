@@ -3,33 +3,31 @@ use std::collections::VecDeque;
 
 use super::{game_world_size, hand_tracker::HandTrackers};
 
-// Hand preference
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HandPreference {
+pub const GAME_DURATION: f32 = 60.0;
+pub const GRAVITY: f32 = 600.0;
+const SLICE_MIN_VELOCITY: f32 = 400.0;
+pub const MIN_PLAYERS: usize = 1;
+pub const MAX_PLAYERS: usize = 2;
+
+#[derive(Component, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PlayerSide {
     Left,
     Right,
-    Both,
 }
 
-#[derive(Resource, Debug, Clone, Copy)]
-pub struct HandSelection {
-    pub preference: HandPreference,
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct FruitCutSettings {
+    pub player_count: usize,
 }
 
-impl Default for HandSelection {
+impl Default for FruitCutSettings {
     fn default() -> Self {
         Self {
-            preference: HandPreference::Both,
+            player_count: MIN_PLAYERS,
         }
     }
 }
 
-// Constants
-pub const GAME_DURATION: f32 = 60.0;
-pub const GRAVITY: f32 = 600.0;
-const SLICE_MIN_VELOCITY: f32 = 400.0;
-
-// Game phases
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum FruitCutPhase {
     #[default]
@@ -46,24 +44,26 @@ pub fn is_result(phase: Res<FruitCutPhase>) -> bool {
     *phase == FruitCutPhase::Result
 }
 
-// Scoreboard
 #[derive(Resource, Default)]
 pub struct Scoreboard {
-    pub score: u32,
-    pub total_sliced: u32,
-    pub total_missed: u32,
-    pub bombs_hit: u32,
+    pub left_score: u32,
+    pub right_score: u32,
+    pub left_total_sliced: u32,
+    pub right_total_sliced: u32,
+    pub left_total_missed: u32,
+    pub right_total_missed: u32,
+    pub left_bombs_hit: u32,
+    pub right_bombs_hit: u32,
 }
 
-// Combo state
-#[derive(Resource, Default)]
-pub struct ComboState {
+#[derive(Clone, Copy, Default)]
+pub struct PlayerCombo {
     pub current_combo: u32,
     pub max_combo: u32,
     pub last_slice_time: f32,
 }
 
-impl ComboState {
+impl PlayerCombo {
     pub fn get_multiplier(&self) -> f32 {
         match self.current_combo {
             0..=4 => 1.0,
@@ -86,7 +86,21 @@ impl ComboState {
     }
 }
 
-// Game timer
+#[derive(Resource, Default)]
+pub struct ComboState {
+    pub left: PlayerCombo,
+    pub right: PlayerCombo,
+}
+
+impl ComboState {
+    pub fn get_mut(&mut self, side: PlayerSide) -> &mut PlayerCombo {
+        match side {
+            PlayerSide::Left => &mut self.left,
+            PlayerSide::Right => &mut self.right,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct GameTimer {
     pub elapsed: f32,
@@ -102,7 +116,6 @@ impl Default for GameTimer {
     }
 }
 
-// Fruit types
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FruitType {
     Apple,
@@ -153,24 +166,31 @@ impl FruitType {
     }
 }
 
-// Components
 #[derive(Component)]
 pub struct Fruit {
     pub fruit_type: FruitType,
     pub velocity: Vec2,
     pub angular_velocity: f32,
+    pub owner: PlayerSide,
 }
 
 #[derive(Component)]
 pub struct Bomb {
     pub velocity: Vec2,
     pub angular_velocity: f32,
+    pub owner: PlayerSide,
 }
 
 #[derive(Component)]
 pub struct FruitCutEntity;
 
-// Fruit spawner
+#[derive(Component)]
+pub struct ScorePopup {
+    pub velocity: f32,
+    pub lifetime: f32,
+    pub initial_alpha: f32,
+}
+
 #[derive(Resource)]
 pub struct FruitSpawner {
     pub timer: Timer,
@@ -186,7 +206,6 @@ impl Default for FruitSpawner {
     }
 }
 
-// Simple LCG for random numbers
 fn lcg(state: &mut u64) -> u64 {
     *state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
     *state
@@ -196,19 +215,18 @@ fn random_f32(state: &mut u64) -> f32 {
     (lcg(state) as f32) / (u64::MAX as f32)
 }
 
-// Systems
 pub fn spawn_fruits(
     mut commands: Commands,
     time: Res<Time>,
     mut spawner: ResMut<FruitSpawner>,
     game_timer: Res<GameTimer>,
+    settings: Res<FruitCutSettings>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     window: Single<&Window>,
 ) {
     spawner.timer.tick(time.delta());
 
-    // Adjust spawn rate based on time
     let interval = if game_timer.elapsed < 20.0 {
         0.8
     } else if game_timer.elapsed < 40.0 {
@@ -225,7 +243,6 @@ pub fn spawn_fruits(
         return;
     }
 
-    // Determine if bomb or fruit
     let bomb_chance = if game_timer.elapsed < 30.0 {
         0.15
     } else {
@@ -233,19 +250,34 @@ pub fn spawn_fruits(
     };
     let is_bomb = random_f32(&mut spawner.rng_state) < bomb_chance;
 
-    // Calculate game world size (same as in setup)
     let game_size = game_world_size(&window);
 
-    // Random spawn position
-    let x = (random_f32(&mut spawner.rng_state) - 0.5) * game_size.x * 0.8;
+    let owner = if settings.player_count == 1 {
+        PlayerSide::Left
+    } else {
+        if random_f32(&mut spawner.rng_state) < 0.5 {
+            PlayerSide::Left
+        } else {
+            PlayerSide::Right
+        }
+    };
+
+    let (x_min, x_max) = if settings.player_count == 1 {
+        (-game_size.x * 0.4, game_size.x * 0.4)
+    } else {
+        match owner {
+            PlayerSide::Left => (-game_size.x * 0.45, -game_size.x * 0.05),
+            PlayerSide::Right => (game_size.x * 0.05, game_size.x * 0.45),
+        }
+    };
+
+    let x = x_min + random_f32(&mut spawner.rng_state) * (x_max - x_min);
     let y = game_size.y * 0.5 + 100.0;
 
-    // Random initial velocity
     let vx = (random_f32(&mut spawner.rng_state) - 0.5) * 200.0;
     let vy = -200.0 - random_f32(&mut spawner.rng_state) * 200.0;
     let velocity = Vec2::new(vx, vy);
 
-    // Random angular velocity
     let angular_velocity = (random_f32(&mut spawner.rng_state) - 0.5) * 4.0;
 
     if is_bomb {
@@ -254,6 +286,7 @@ pub fn spawn_fruits(
             Bomb {
                 velocity,
                 angular_velocity,
+                owner,
             },
             FruitCutEntity,
             Mesh2d(meshes.add(Circle::new(radius))),
@@ -270,6 +303,7 @@ pub fn spawn_fruits(
                 fruit_type,
                 velocity,
                 angular_velocity,
+                owner,
             },
             FruitCutEntity,
             Mesh2d(meshes.add(Circle::new(radius))),
@@ -282,41 +316,46 @@ pub fn spawn_fruits(
 pub fn update_fruits(
     mut commands: Commands,
     time: Res<Time>,
-    mut fruit_query: Query<(Entity, &mut Fruit, &mut Transform)>,
-    mut bomb_query: Query<(Entity, &mut Bomb, &mut Transform), Without<Fruit>>,
+    mut fruit_query: Query<(Entity, &Fruit, &mut Transform)>,
+    mut bomb_query: Query<(Entity, &Bomb, &mut Transform), Without<Fruit>>,
     mut scoreboard: ResMut<Scoreboard>,
     mut combo: ResMut<ComboState>,
     window: Single<&Window>,
 ) {
     let dt = time.delta_secs();
 
-    // Calculate game world size
     let game_size = game_world_size(&window);
     let despawn_y = -game_size.y * 0.5 - 100.0;
 
-    // Update fruits
-    for (entity, mut fruit, mut transform) in fruit_query.iter_mut() {
-        fruit.velocity.y -= GRAVITY * dt;
-        transform.translation.x += fruit.velocity.x * dt;
-        transform.translation.y += fruit.velocity.y * dt;
+    for (entity, fruit, mut transform) in fruit_query.iter_mut() {
+        let mut velocity = fruit.velocity;
+        velocity.y -= GRAVITY * dt;
+        transform.translation.x += velocity.x * dt;
+        transform.translation.y += velocity.y * dt;
         transform.rotation *= Quat::from_rotation_z(fruit.angular_velocity * dt);
 
-        // Despawn if off screen
         if transform.translation.y < despawn_y {
             commands.entity(entity).despawn();
-            scoreboard.total_missed += 1;
-            combo.reset();
+            match fruit.owner {
+                PlayerSide::Left => {
+                    scoreboard.left_total_missed += 1;
+                    combo.left.reset();
+                }
+                PlayerSide::Right => {
+                    scoreboard.right_total_missed += 1;
+                    combo.right.reset();
+                }
+            }
         }
     }
 
-    // Update bombs
-    for (entity, mut bomb, mut transform) in bomb_query.iter_mut() {
-        bomb.velocity.y -= GRAVITY * dt;
-        transform.translation.x += bomb.velocity.x * dt;
-        transform.translation.y += bomb.velocity.y * dt;
+    for (entity, bomb, mut transform) in bomb_query.iter_mut() {
+        let mut velocity = bomb.velocity;
+        velocity.y -= GRAVITY * dt;
+        transform.translation.x += velocity.x * dt;
+        transform.translation.y += velocity.y * dt;
         transform.rotation *= Quat::from_rotation_z(bomb.angular_velocity * dt);
 
-        // Despawn if off screen
         if transform.translation.y < despawn_y {
             commands.entity(entity).despawn();
         }
@@ -327,7 +366,7 @@ pub fn check_fruit_slicing(
     mut commands: Commands,
     hand_trackers: Res<HandTrackers>,
     fruit_query: Query<(Entity, &Fruit, &Transform)>,
-    bomb_query: Query<(Entity, &Transform), With<Bomb>>,
+    bomb_query: Query<(Entity, &Bomb, &Transform)>,
     mut scoreboard: ResMut<Scoreboard>,
     mut combo: ResMut<ComboState>,
     time: Res<Time>,
@@ -339,69 +378,115 @@ pub fn check_fruit_slicing(
         let radius = fruit.fruit_type.radius();
 
         let mut sliced = false;
+        let mut slicing_owner = None;
 
-        if let Some(velocity) = hand_trackers.left_velocity() {
-            if velocity.length() >= SLICE_MIN_VELOCITY {
-                if check_trail_intersection(&hand_trackers.left_trail, fruit_pos, radius) {
-                    sliced = true;
-                }
+        for hand_trail in &hand_trackers.hands {
+            if hand_trail.owner != fruit.owner {
+                continue;
             }
-        }
 
-        if !sliced {
-            if let Some(velocity) = hand_trackers.right_velocity() {
+            if let Some(velocity) = hand_trail.velocity() {
                 if velocity.length() >= SLICE_MIN_VELOCITY {
-                    if check_trail_intersection(&hand_trackers.right_trail, fruit_pos, radius) {
+                    if check_trail_intersection(&hand_trail.trail, fruit_pos, radius) {
                         sliced = true;
+                        slicing_owner = Some(hand_trail.owner);
+                        break;
                     }
                 }
             }
         }
 
         if sliced {
-            let base_score = fruit.fruit_type.score();
-            let multiplier = combo.get_multiplier();
-            let final_score = (base_score as f32 * multiplier) as u32;
+            if let Some(owner) = slicing_owner {
+                let player_combo = combo.get_mut(owner);
+                let base_score = fruit.fruit_type.score();
+                let multiplier = player_combo.get_multiplier();
+                let final_score = (base_score as f32 * multiplier) as u32;
 
-            scoreboard.score += final_score;
-            scoreboard.total_sliced += 1;
-            combo.increment(elapsed);
+                match owner {
+                    PlayerSide::Left => {
+                        scoreboard.left_score += final_score;
+                        scoreboard.left_total_sliced += 1;
+                    }
+                    PlayerSide::Right => {
+                        scoreboard.right_score += final_score;
+                        scoreboard.right_total_sliced += 1;
+                    }
+                }
 
-            commands.entity(entity).despawn();
+                player_combo.increment(elapsed);
+
+                spawn_score_popup(
+                    &mut commands,
+                    fruit_pos,
+                    final_score,
+                    fruit.fruit_type.color(),
+                );
+
+                commands.entity(entity).despawn();
+            }
         }
     }
 
-    for (entity, transform) in bomb_query.iter() {
+    for (entity, bomb, transform) in bomb_query.iter() {
         let bomb_pos = transform.translation.truncate();
         let radius = 35.0;
 
         let mut hit = false;
+        let mut hitting_owner = None;
 
-        if let Some(velocity) = hand_trackers.left_velocity() {
-            if velocity.length() >= SLICE_MIN_VELOCITY {
-                if check_trail_intersection(&hand_trackers.left_trail, bomb_pos, radius) {
-                    hit = true;
-                }
+        for hand_trail in &hand_trackers.hands {
+            if hand_trail.owner != bomb.owner {
+                continue;
             }
-        }
 
-        if !hit {
-            if let Some(velocity) = hand_trackers.right_velocity() {
+            if let Some(velocity) = hand_trail.velocity() {
                 if velocity.length() >= SLICE_MIN_VELOCITY {
-                    if check_trail_intersection(&hand_trackers.right_trail, bomb_pos, radius) {
+                    if check_trail_intersection(&hand_trail.trail, bomb_pos, radius) {
                         hit = true;
+                        hitting_owner = Some(hand_trail.owner);
+                        break;
                     }
                 }
             }
         }
 
         if hit {
-            scoreboard.score = scoreboard.score.saturating_sub(50);
-            scoreboard.bombs_hit += 1;
-            combo.reset();
-            commands.entity(entity).despawn();
+            if let Some(owner) = hitting_owner {
+                match owner {
+                    PlayerSide::Left => {
+                        scoreboard.left_score = scoreboard.left_score.saturating_sub(50);
+                        scoreboard.left_bombs_hit += 1;
+                        combo.left.reset();
+                    }
+                    PlayerSide::Right => {
+                        scoreboard.right_score = scoreboard.right_score.saturating_sub(50);
+                        scoreboard.right_bombs_hit += 1;
+                        combo.right.reset();
+                    }
+                }
+                commands.entity(entity).despawn();
+            }
         }
     }
+}
+
+fn spawn_score_popup(commands: &mut Commands, position: Vec2, score: u32, color: Color) {
+    commands.spawn((
+        ScorePopup {
+            velocity: 200.0,
+            lifetime: 0.0,
+            initial_alpha: 0.9,
+        },
+        FruitCutEntity,
+        Text2d::new(format!("+{}", score)),
+        TextFont {
+            font_size: 32.0,
+            ..default()
+        },
+        TextColor(color),
+        Transform::from_xyz(position.x, position.y, 5.0),
+    ));
 }
 
 fn check_trail_intersection(trail: &VecDeque<(Vec2, f32)>, center: Vec2, radius: f32) -> bool {
@@ -448,27 +533,77 @@ pub fn update_game_timer(
     mut commands: Commands,
     scoreboard: Res<Scoreboard>,
     combo: Res<ComboState>,
+    settings: Res<FruitCutSettings>,
 ) {
     game_timer.timer.tick(time.delta());
     game_timer.elapsed = game_timer.timer.elapsed_secs();
 
     if game_timer.timer.just_finished() {
         *phase = FruitCutPhase::Result;
+
+        let winner = if settings.player_count == 2 {
+            if scoreboard.left_score > scoreboard.right_score {
+                Some(PlayerSide::Left)
+            } else if scoreboard.right_score > scoreboard.left_score {
+                Some(PlayerSide::Right)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         commands.insert_resource(GameResult {
-            final_score: scoreboard.score,
-            total_sliced: scoreboard.total_sliced,
-            total_missed: scoreboard.total_missed,
-            bombs_hit: scoreboard.bombs_hit,
-            max_combo: combo.max_combo,
+            player_count: settings.player_count,
+            winner,
+            left_score: scoreboard.left_score,
+            left_total_sliced: scoreboard.left_total_sliced,
+            left_total_missed: scoreboard.left_total_missed,
+            left_bombs_hit: scoreboard.left_bombs_hit,
+            left_max_combo: combo.left.max_combo,
+            right_score: scoreboard.right_score,
+            right_total_sliced: scoreboard.right_total_sliced,
+            right_total_missed: scoreboard.right_total_missed,
+            right_bombs_hit: scoreboard.right_bombs_hit,
+            right_max_combo: combo.right.max_combo,
         });
     }
 }
 
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct GameResult {
-    pub final_score: u32,
-    pub total_sliced: u32,
-    pub total_missed: u32,
-    pub bombs_hit: u32,
-    pub max_combo: u32,
+    pub player_count: usize,
+    pub winner: Option<PlayerSide>,
+    pub left_score: u32,
+    pub left_total_sliced: u32,
+    pub left_total_missed: u32,
+    pub left_bombs_hit: u32,
+    pub left_max_combo: u32,
+    pub right_score: u32,
+    pub right_total_sliced: u32,
+    pub right_total_missed: u32,
+    pub right_bombs_hit: u32,
+    pub right_max_combo: u32,
+}
+
+pub fn update_score_popups(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut popup_query: Query<(Entity, &mut ScorePopup, &mut Transform, &mut TextColor)>,
+) {
+    let dt = time.delta_secs();
+    const MAX_LIFETIME: f32 = 1.0;
+
+    for (entity, mut popup, mut transform, mut text_color) in popup_query.iter_mut() {
+        popup.lifetime += dt;
+
+        transform.translation.y += popup.velocity * dt;
+
+        let alpha = popup.initial_alpha * (1.0 - popup.lifetime / MAX_LIFETIME).max(0.0);
+        text_color.0 = text_color.0.with_alpha(alpha);
+
+        if popup.lifetime >= MAX_LIFETIME {
+            commands.entity(entity).despawn();
+        }
+    }
 }
