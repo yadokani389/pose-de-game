@@ -1,3 +1,3 @@
+pub mod floating_text_popup;
 pub mod pitch;
-pub mod score_popup;
-pub use score_popup::{ScorePopup, spawn_score_popup, update_score_popups};
+pub use floating_text_popup::{spawn_floating_text_popup, update_floating_text_popups};
