@@ -1,12 +1,13 @@
 use bevy::prelude::*;
 
-use crate::{AppState, assets::UiFont};
+use crate::{AppState, assets::UiFont, utils::floating_text_popup::FloatingTextPopup};
 
 use super::game::{
-    ComboState, FruitCutEntity, FruitCutPhase, FruitCutSettings, FruitSpawner, GameResult,
-    GameTimer, PlayerSide, Scoreboard,
+    Bomb, ComboState, Fruit, FruitCutEntity, FruitCutPhase, FruitCutSettings, FruitSpawner,
+    GameResult, GameTimer, PlayerSide, Scoreboard,
 };
 use super::hand_tracker::HandTrackers;
+use super::setup::spawn_setup_ui;
 
 const RESULT_HEADER_SIZE: f32 = 52.0;
 const RESULT_TITLE_SIZE: f32 = 44.0;
@@ -534,7 +535,12 @@ pub fn handle_result_input(
     mut game_timer: ResMut<GameTimer>,
     mut spawner: ResMut<FruitSpawner>,
     mut hand_trackers: ResMut<HandTrackers>,
+    ui_font: Res<UiFont>,
     result_ui: Query<Entity, With<ResultRoot>>,
+    fruits: Query<Entity, With<Fruit>>,
+    bombs: Query<Entity, With<Bomb>>,
+    popups: Query<Entity, With<FloatingTextPopup>>,
+    window: Single<&Window>,
 ) {
     if input.just_pressed(KeyCode::Space) {
         for entity in &result_ui {
@@ -549,6 +555,11 @@ pub fn handle_result_input(
             &mut game_timer,
             &mut spawner,
             &mut hand_trackers,
+            &ui_font,
+            &fruits,
+            &bombs,
+            &popups,
+            &window,
         );
     }
 }
@@ -573,7 +584,12 @@ pub fn button_system(
     mut game_timer: ResMut<GameTimer>,
     mut spawner: ResMut<FruitSpawner>,
     mut hand_trackers: ResMut<HandTrackers>,
+    ui_font: Res<UiFont>,
     result_ui: Query<Entity, With<ResultRoot>>,
+    fruits: Query<Entity, With<Fruit>>,
+    bombs: Query<Entity, With<Bomb>>,
+    popups: Query<Entity, With<FloatingTextPopup>>,
+    window: Single<&Window>,
 ) {
     for (interaction, mut color, mut border_color, retry, menu) in &mut query {
         match *interaction {
@@ -594,6 +610,11 @@ pub fn button_system(
                         &mut game_timer,
                         &mut spawner,
                         &mut hand_trackers,
+                        &ui_font,
+                        &fruits,
+                        &bombs,
+                        &popups,
+                        &window,
                     );
                 } else if menu.is_some() {
                     next_state.set(AppState::MainMenu);
@@ -620,7 +641,22 @@ fn reset_game(
     game_timer: &mut ResMut<GameTimer>,
     spawner: &mut ResMut<FruitSpawner>,
     hand_trackers: &mut ResMut<HandTrackers>,
+    ui_font: &UiFont,
+    fruits: &Query<Entity, With<Fruit>>,
+    bombs: &Query<Entity, With<Bomb>>,
+    popups: &Query<Entity, With<FloatingTextPopup>>,
+    window: &Window,
 ) {
+    for entity in fruits.iter() {
+        commands.entity(entity).despawn();
+    }
+    for entity in bombs.iter() {
+        commands.entity(entity).despawn();
+    }
+    for entity in popups.iter() {
+        commands.entity(entity).despawn();
+    }
+
     **phase = FruitCutPhase::Setup;
     **settings = FruitCutSettings::default();
     **scoreboard = Scoreboard::default();
@@ -629,4 +665,6 @@ fn reset_game(
     **spawner = FruitSpawner::default();
     **hand_trackers = HandTrackers::default();
     commands.remove_resource::<GameResult>();
+
+    spawn_setup_ui(commands, ui_font, settings, window);
 }

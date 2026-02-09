@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::VecDeque;
 
 use super::{game_world_size, hand_tracker::HandTrackers};
+use crate::utils::spawn_floating_text_popup;
 
 pub const GAME_DURATION: f32 = 60.0;
 pub const GRAVITY: f32 = 600.0;
@@ -182,17 +183,11 @@ pub struct Bomb {
 #[derive(Component)]
 pub struct FruitCutEntity;
 
-#[derive(Component)]
-pub struct ScorePopup {
-    pub velocity: f32,
-    pub lifetime: f32,
-    pub initial_alpha: f32,
-}
-
 #[derive(Resource)]
 pub struct FruitSpawner {
     pub timer: Timer,
     pub rng_state: u64,
+    pub next_spawn_side: PlayerSide,
 }
 
 impl Default for FruitSpawner {
@@ -200,6 +195,7 @@ impl Default for FruitSpawner {
         Self {
             timer: Timer::from_seconds(0.8, TimerMode::Repeating),
             rng_state: 0x853c_49e6_748f_ea9b,
+            next_spawn_side: PlayerSide::Left,
         }
     }
 }
@@ -225,16 +221,23 @@ pub fn spawn_fruits(
 ) {
     spawner.timer.tick(time.delta());
 
-    let interval = if game_timer.elapsed < 20.0 {
+    let base_interval = if game_timer.elapsed < 20.0 {
         0.8
     } else if game_timer.elapsed < 40.0 {
         0.65
     } else {
         0.5
     };
-
-    if spawner.timer.duration().as_secs_f32() != interval {
-        spawner.timer = Timer::from_seconds(interval, TimerMode::Repeating);
+    let interval = if settings.player_count == 2 {
+        base_interval * 0.6
+    } else {
+        base_interval
+    };
+    let current_duration = spawner.timer.duration().as_secs_f32();
+    if (current_duration - interval).abs() > 0.001 {
+        spawner
+            .timer
+            .set_duration(std::time::Duration::from_secs_f32(interval));
     }
 
     if !spawner.timer.just_finished() {
@@ -250,13 +253,23 @@ pub fn spawn_fruits(
 
     let game_size = game_world_size(&window);
 
-    let (x_min, x_max) = if settings.player_count == 1 {
-        (-game_size.x * 0.4, game_size.x * 0.4)
+    let x = if settings.player_count == 1 {
+        let x_min = -game_size.x * 0.4;
+        let x_max = game_size.x * 0.4;
+        x_min + random_f32(&mut spawner.rng_state) * (x_max - x_min)
     } else {
-        (-game_size.x * 0.45, game_size.x * 0.45)
+        let (x_min, x_max) = match spawner.next_spawn_side {
+            PlayerSide::Left => (-game_size.x * 0.45, -game_size.x * 0.05),
+            PlayerSide::Right => (game_size.x * 0.05, game_size.x * 0.45),
+        };
+        spawner.next_spawn_side = match spawner.next_spawn_side {
+            PlayerSide::Left => PlayerSide::Right,
+            PlayerSide::Right => PlayerSide::Left,
+        };
+
+        x_min + random_f32(&mut spawner.rng_state) * (x_max - x_min)
     };
 
-    let x = x_min + random_f32(&mut spawner.rng_state) * (x_max - x_min);
     let y = game_size.y * 0.5 + 100.0;
 
     let vx = (random_f32(&mut spawner.rng_state) - 0.5) * 200.0;
@@ -412,12 +425,13 @@ pub fn check_fruit_slicing(
                 }
 
                 player_combo.increment(elapsed);
-
-                spawn_score_popup(
+                spawn_floating_text_popup(
                     &mut commands,
                     fruit_pos,
-                    final_score,
+                    format!("+{}", final_score),
                     fruit.fruit_type.color(),
+                    None,
+                    32.0,
                 );
 
                 commands.entity(entity).despawn();
@@ -472,24 +486,6 @@ pub fn check_fruit_slicing(
             }
         }
     }
-}
-
-fn spawn_score_popup(commands: &mut Commands, position: Vec2, score: u32, color: Color) {
-    commands.spawn((
-        ScorePopup {
-            velocity: 200.0,
-            lifetime: 0.0,
-            initial_alpha: 0.9,
-        },
-        FruitCutEntity,
-        Text2d::new(format!("+{}", score)),
-        TextFont {
-            font_size: 32.0,
-            ..default()
-        },
-        TextColor(color),
-        Transform::from_xyz(position.x, position.y, 5.0),
-    ));
 }
 
 fn check_trail_intersection(trail: &VecDeque<(Vec2, f32)>, center: Vec2, radius: f32) -> bool {
@@ -587,26 +583,4 @@ pub struct GameResult {
     pub right_total_missed: u32,
     pub right_bombs_hit: u32,
     pub right_max_combo: u32,
-}
-
-pub fn update_score_popups(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut popup_query: Query<(Entity, &mut ScorePopup, &mut Transform, &mut TextColor)>,
-) {
-    let dt = time.delta_secs();
-    const MAX_LIFETIME: f32 = 1.0;
-
-    for (entity, mut popup, mut transform, mut text_color) in popup_query.iter_mut() {
-        popup.lifetime += dt;
-
-        transform.translation.y += popup.velocity * dt;
-
-        let alpha = popup.initial_alpha * (1.0 - popup.lifetime / MAX_LIFETIME).max(0.0);
-        text_color.0 = text_color.0.with_alpha(alpha);
-
-        if popup.lifetime >= MAX_LIFETIME {
-            commands.entity(entity).despawn();
-        }
-    }
 }

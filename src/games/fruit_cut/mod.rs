@@ -74,7 +74,7 @@ impl Plugin for FruitCutPlugin {
                     game::update_fruits.run_if(is_playing),
                     game::check_fruit_slicing.run_if(is_playing),
                     game::update_game_timer.run_if(is_playing),
-                    game::update_score_popups.run_if(is_playing),
+                    crate::utils::update_floating_text_popups.run_if(is_playing),
                     render::render_hand_trails,
                     ui::update_hud.run_if(is_playing),
                     result::spawn_result_ui.run_if(is_result),

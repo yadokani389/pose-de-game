@@ -43,77 +43,12 @@ pub fn is_setup(phase: Res<FruitCutPhase>) -> bool {
     *phase == FruitCutPhase::Setup
 }
 
-pub fn setup(
-    mut commands: Commands,
-    mut phase: ResMut<FruitCutPhase>,
-    mut settings: ResMut<FruitCutSettings>,
-    mut scoreboard: ResMut<Scoreboard>,
-    mut combo: ResMut<ComboState>,
-    mut game_timer: ResMut<GameTimer>,
-    mut spawner: ResMut<FruitSpawner>,
-    mut hand_trackers: ResMut<HandTrackers>,
-    mut latest_frame: ResMut<LatestFrameRes>,
-    ui_font: Res<UiFont>,
-    mut images: ResMut<Assets<Image>>,
-    window: Single<&Window>,
+pub fn spawn_setup_ui(
+    commands: &mut Commands,
+    ui_font: &UiFont,
+    settings: &FruitCutSettings,
+    window: &Window,
 ) {
-    *phase = FruitCutPhase::Setup;
-    *settings = FruitCutSettings::default();
-    *scoreboard = Scoreboard::default();
-    *combo = ComboState::default();
-    *game_timer = GameTimer::default();
-    *spawner = FruitSpawner::default();
-    *hand_trackers = HandTrackers::default();
-    latest_frame.frame = None;
-
-    let game_size = game_world_size(&window);
-    let projection = Projection::Orthographic(OrthographicProjection {
-        scaling_mode: ScalingMode::Fixed {
-            width: game_size.x,
-            height: game_size.y,
-        },
-        ..OrthographicProjection::default_2d()
-    });
-
-    commands.spawn((Camera2d, projection, FruitCutEntity));
-
-    let overlay_image = Image::new_fill(
-        Extent3d {
-            width: 1,
-            height: 1,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        &[0, 0, 0, 0],
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
-    let overlay_handle = images.add(overlay_image);
-    commands.insert_resource(CameraOverlayImageHandle(overlay_handle.clone()));
-
-    commands.spawn((
-        Sprite {
-            image: overlay_handle,
-            color: Color::srgba(1.0, 1.0, 1.0, CAMERA_OVERLAY_ALPHA),
-            ..default()
-        },
-        CameraOverlay,
-        Transform::from_xyz(0.0, 0.0, CAMERA_OVERLAY_Z),
-        FruitCutEntity,
-    ));
-
-    let game_size = game_world_size(&window);
-    commands.spawn((
-        Sprite::from_color(
-            CENTER_LINE_COLOR,
-            Vec2::new(CENTER_LINE_THICKNESS, game_size.y),
-        ),
-        CenterLine,
-        Transform::from_xyz(0.0, 0.0, 2.0),
-        Visibility::Hidden,
-        FruitCutEntity,
-    ));
-
     commands
         .spawn((
             SetupText,
@@ -195,6 +130,80 @@ pub fn setup(
                 TextColor(Color::srgb(0.7, 0.7, 0.8)),
             ));
         });
+}
+
+pub fn setup(
+    mut commands: Commands,
+    mut phase: ResMut<FruitCutPhase>,
+    mut settings: ResMut<FruitCutSettings>,
+    mut scoreboard: ResMut<Scoreboard>,
+    mut combo: ResMut<ComboState>,
+    mut game_timer: ResMut<GameTimer>,
+    mut spawner: ResMut<FruitSpawner>,
+    mut hand_trackers: ResMut<HandTrackers>,
+    mut latest_frame: ResMut<LatestFrameRes>,
+    ui_font: Res<UiFont>,
+    mut images: ResMut<Assets<Image>>,
+    window: Single<&Window>,
+) {
+    *phase = FruitCutPhase::Setup;
+    *settings = FruitCutSettings::default();
+    *scoreboard = Scoreboard::default();
+    *combo = ComboState::default();
+    *game_timer = GameTimer::default();
+    *spawner = FruitSpawner::default();
+    *hand_trackers = HandTrackers::default();
+    latest_frame.frame = None;
+
+    let game_size = game_world_size(&window);
+    let projection = Projection::Orthographic(OrthographicProjection {
+        scaling_mode: ScalingMode::Fixed {
+            width: game_size.x,
+            height: game_size.y,
+        },
+        ..OrthographicProjection::default_2d()
+    });
+
+    commands.spawn((Camera2d, projection, FruitCutEntity));
+
+    let overlay_image = Image::new_fill(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[0, 0, 0, 0],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    let overlay_handle = images.add(overlay_image);
+    commands.insert_resource(CameraOverlayImageHandle(overlay_handle.clone()));
+
+    commands.spawn((
+        Sprite {
+            image: overlay_handle,
+            color: Color::srgba(1.0, 1.0, 1.0, CAMERA_OVERLAY_ALPHA),
+            ..default()
+        },
+        CameraOverlay,
+        Transform::from_xyz(0.0, 0.0, CAMERA_OVERLAY_Z),
+        FruitCutEntity,
+    ));
+
+    let game_size = game_world_size(&window);
+    commands.spawn((
+        Sprite::from_color(
+            CENTER_LINE_COLOR,
+            Vec2::new(CENTER_LINE_THICKNESS, game_size.y),
+        ),
+        CenterLine,
+        Transform::from_xyz(0.0, 0.0, 2.0),
+        Visibility::Hidden,
+        FruitCutEntity,
+    ));
+
+    spawn_setup_ui(&mut commands, &ui_font, &settings, &window);
 }
 
 pub fn cleanup(mut commands: Commands, entities: Query<Entity, With<FruitCutEntity>>) {

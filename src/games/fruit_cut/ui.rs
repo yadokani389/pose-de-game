@@ -68,7 +68,6 @@ pub fn update_hud(
             }
         }
     } else {
-        // Two player HUD
         if left_score_query.is_empty() {
             spawn_two_player_hud(&mut commands, &ui_font, &scoreboard);
         }
