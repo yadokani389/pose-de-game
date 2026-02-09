@@ -107,12 +107,10 @@ pub fn update_hand_trackers(
     let timestamp = time.elapsed_secs();
     let dt = time.delta_secs();
 
-    let left_color = Color::srgba(0.3, 0.6, 1.0, 0.6);
-    let right_color = Color::srgba(1.0, 0.3, 0.4, 0.6);
-
     struct DetectedHand {
         position: Vec2,
         owner: PlayerSide,
+        is_right: bool,
     }
 
     let mut detected_hands = Vec::new();
@@ -127,6 +125,7 @@ pub fn update_hand_trackers(
                 detected_hands.push(DetectedHand {
                     position,
                     owner: PlayerSide::Left,
+                    is_right: false,
                 });
             }
 
@@ -138,6 +137,7 @@ pub fn update_hand_trackers(
                 detected_hands.push(DetectedHand {
                     position,
                     owner: PlayerSide::Left,
+                    is_right: true,
                 });
             }
         }
@@ -176,7 +176,11 @@ pub fn update_hand_trackers(
                     Vec2::new(left_hand[0] as f32, left_hand[1] as f32),
                     mapped_size,
                 );
-                detected_hands.push(DetectedHand { position, owner });
+                detected_hands.push(DetectedHand {
+                    position,
+                    owner,
+                    is_right: false,
+                });
             }
 
             if let Some(Some(right_hand)) = person.keypoints.get(RIGHT_HAND_KEYPOINT) {
@@ -184,7 +188,11 @@ pub fn update_hand_trackers(
                     Vec2::new(right_hand[0] as f32, right_hand[1] as f32),
                     mapped_size,
                 );
-                detected_hands.push(DetectedHand { position, owner });
+                detected_hands.push(DetectedHand {
+                    position,
+                    owner,
+                    is_right: true,
+                });
             }
         }
     }
@@ -215,10 +223,20 @@ pub fn update_hand_trackers(
 
     for (i, detected) in detected_hands.iter().enumerate() {
         if !matched[i] {
-            let color = match detected.owner {
-                PlayerSide::Left => left_color,
-                PlayerSide::Right => right_color,
+            let color = if detected.owner == PlayerSide::Left {
+                if detected.is_right {
+                    Color::srgba(1.0, 0.0, 0.0, 0.6)
+                } else {
+                    Color::srgba(0.0, 0.0, 1.0, 0.6)
+                }
+            } else {
+                if detected.is_right {
+                    Color::srgba(1.0, 0.5, 0.0, 0.6)
+                } else {
+                    Color::srgba(0.7, 1.0, 0.2, 0.6)
+                }
             };
+
             let mut trail = HandTrail::new(color, detected.owner, timestamp);
             trail.update(detected.position, timestamp, dt);
             trackers.hands.push(trail);

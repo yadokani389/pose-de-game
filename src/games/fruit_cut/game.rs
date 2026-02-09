@@ -171,14 +171,12 @@ pub struct Fruit {
     pub fruit_type: FruitType,
     pub velocity: Vec2,
     pub angular_velocity: f32,
-    pub owner: PlayerSide,
 }
 
 #[derive(Component)]
 pub struct Bomb {
     pub velocity: Vec2,
     pub angular_velocity: f32,
-    pub owner: PlayerSide,
 }
 
 #[derive(Component)]
@@ -252,23 +250,10 @@ pub fn spawn_fruits(
 
     let game_size = game_world_size(&window);
 
-    let owner = if settings.player_count == 1 {
-        PlayerSide::Left
-    } else {
-        if random_f32(&mut spawner.rng_state) < 0.5 {
-            PlayerSide::Left
-        } else {
-            PlayerSide::Right
-        }
-    };
-
     let (x_min, x_max) = if settings.player_count == 1 {
         (-game_size.x * 0.4, game_size.x * 0.4)
     } else {
-        match owner {
-            PlayerSide::Left => (-game_size.x * 0.45, -game_size.x * 0.05),
-            PlayerSide::Right => (game_size.x * 0.05, game_size.x * 0.45),
-        }
+        (-game_size.x * 0.45, game_size.x * 0.45)
     };
 
     let x = x_min + random_f32(&mut spawner.rng_state) * (x_max - x_min);
@@ -286,7 +271,6 @@ pub fn spawn_fruits(
             Bomb {
                 velocity,
                 angular_velocity,
-                owner,
             },
             FruitCutEntity,
             Mesh2d(meshes.add(Circle::new(radius))),
@@ -303,7 +287,6 @@ pub fn spawn_fruits(
                 fruit_type,
                 velocity,
                 angular_velocity,
-                owner,
             },
             FruitCutEntity,
             Mesh2d(meshes.add(Circle::new(radius))),
@@ -335,8 +318,13 @@ pub fn update_fruits(
         transform.rotation *= Quat::from_rotation_z(fruit.angular_velocity * dt);
 
         if transform.translation.y < despawn_y {
-            commands.entity(entity).despawn();
-            match fruit.owner {
+            let side = if transform.translation.x >= 0.0 {
+                PlayerSide::Right
+            } else {
+                PlayerSide::Left
+            };
+
+            match side {
                 PlayerSide::Left => {
                     scoreboard.left_total_missed += 1;
                     combo.left.reset();
@@ -346,6 +334,8 @@ pub fn update_fruits(
                     combo.right.reset();
                 }
             }
+
+            commands.entity(entity).despawn();
         }
     }
 
@@ -380,8 +370,14 @@ pub fn check_fruit_slicing(
         let mut sliced = false;
         let mut slicing_owner = None;
 
+        let center_side = if fruit_pos.x >= 0.0 {
+            PlayerSide::Right
+        } else {
+            PlayerSide::Left
+        };
+
         for hand_trail in &hand_trackers.hands {
-            if hand_trail.owner != fruit.owner {
+            if hand_trail.owner != center_side {
                 continue;
             }
 
@@ -428,15 +424,21 @@ pub fn check_fruit_slicing(
         }
     }
 
-    for (entity, bomb, transform) in bomb_query.iter() {
+    for (entity, _bomb, transform) in bomb_query.iter() {
         let bomb_pos = transform.translation.truncate();
         let radius = 35.0;
 
         let mut hit = false;
         let mut hitting_owner = None;
 
+        let bomb_center_side = if bomb_pos.x >= 0.0 {
+            PlayerSide::Right
+        } else {
+            PlayerSide::Left
+        };
+
         for hand_trail in &hand_trackers.hands {
-            if hand_trail.owner != bomb.owner {
+            if hand_trail.owner != bomb_center_side {
                 continue;
             }
 
