@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use crate::{AppState, assets::UiFont};
 
 use super::game::{
-    ComboState, FruitCutEntity, FruitCutPhase, FruitSpawner, GameResult, GameTimer, PlayerSide,
-    Scoreboard,
+    ComboState, FruitCutEntity, FruitCutPhase, FruitCutSettings, FruitSpawner, GameResult,
+    GameTimer, PlayerSide, Scoreboard,
 };
 use super::hand_tracker::HandTrackers;
 
@@ -528,6 +528,7 @@ pub fn handle_result_input(
     input: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut phase: ResMut<FruitCutPhase>,
+    mut settings: ResMut<FruitCutSettings>,
     mut scoreboard: ResMut<Scoreboard>,
     mut combo: ResMut<ComboState>,
     mut game_timer: ResMut<GameTimer>,
@@ -542,6 +543,7 @@ pub fn handle_result_input(
         reset_game(
             &mut commands,
             &mut phase,
+            &mut settings,
             &mut scoreboard,
             &mut combo,
             &mut game_timer,
@@ -565,6 +567,7 @@ pub fn button_system(
     mut next_state: ResMut<NextState<AppState>>,
     mut commands: Commands,
     mut phase: ResMut<FruitCutPhase>,
+    mut settings: ResMut<FruitCutSettings>,
     mut scoreboard: ResMut<Scoreboard>,
     mut combo: ResMut<ComboState>,
     mut game_timer: ResMut<GameTimer>,
@@ -585,6 +588,7 @@ pub fn button_system(
                     reset_game(
                         &mut commands,
                         &mut phase,
+                        &mut settings,
                         &mut scoreboard,
                         &mut combo,
                         &mut game_timer,
@@ -610,6 +614,7 @@ pub fn button_system(
 fn reset_game(
     commands: &mut Commands,
     phase: &mut ResMut<FruitCutPhase>,
+    settings: &mut ResMut<FruitCutSettings>,
     scoreboard: &mut ResMut<Scoreboard>,
     combo: &mut ResMut<ComboState>,
     game_timer: &mut ResMut<GameTimer>,
@@ -617,6 +622,7 @@ fn reset_game(
     hand_trackers: &mut ResMut<HandTrackers>,
 ) {
     **phase = FruitCutPhase::Setup;
+    **settings = FruitCutSettings::default();
     **scoreboard = Scoreboard::default();
     **combo = ComboState::default();
     **game_timer = GameTimer::default();

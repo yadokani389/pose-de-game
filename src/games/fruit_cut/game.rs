@@ -360,6 +360,7 @@ pub fn check_fruit_slicing(
     mut scoreboard: ResMut<Scoreboard>,
     mut combo: ResMut<ComboState>,
     time: Res<Time>,
+    settings: Res<FruitCutSettings>,
 ) {
     let elapsed = time.elapsed_secs();
 
@@ -377,7 +378,7 @@ pub fn check_fruit_slicing(
         };
 
         for hand_trail in &hand_trackers.hands {
-            if hand_trail.owner != center_side {
+            if settings.player_count == 2 && hand_trail.owner != center_side {
                 continue;
             }
 
@@ -438,7 +439,7 @@ pub fn check_fruit_slicing(
         };
 
         for hand_trail in &hand_trackers.hands {
-            if hand_trail.owner != bomb_center_side {
+            if settings.player_count == 2 && hand_trail.owner != bomb_center_side {
                 continue;
             }
 

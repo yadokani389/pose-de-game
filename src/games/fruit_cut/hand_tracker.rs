@@ -154,11 +154,23 @@ pub fn update_hand_trackers(
 
             people_with_centers.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-            if let Some((id, _)) = people_with_centers.get(0) {
-                trackers.left_player_id = Some(*id);
-            }
-            if let Some((id, _)) = people_with_centers.get(1) {
-                trackers.right_player_id = Some(*id);
+            trackers.left_player_id = None;
+            trackers.right_player_id = None;
+
+            if people_with_centers.len() == 1 {
+                let (id, center_x) = people_with_centers[0];
+                if center_x < 0.5 {
+                    trackers.left_player_id = Some(id);
+                } else {
+                    trackers.right_player_id = Some(id);
+                }
+            } else if people_with_centers.len() >= 2 {
+                if let Some((id, _)) = people_with_centers.get(0) {
+                    trackers.left_player_id = Some(*id);
+                }
+                if let Some((id, _)) = people_with_centers.get(1) {
+                    trackers.right_player_id = Some(*id);
+                }
             }
         }
 
