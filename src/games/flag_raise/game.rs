@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
-    audio::pitch::{BeepPalette, play_beep},
     pose::PeopleDataRes,
+    utils::pitch::{BeepPalette, play_beep},
 };
 
 use super::settings::{FlagRaisePhase, FlagRaiseSettings, GameMode, MAX_PLAYERS};
