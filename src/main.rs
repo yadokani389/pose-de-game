@@ -6,11 +6,11 @@ use clap::Parser;
 
 mod args;
 mod assets;
-mod audio;
 mod games;
 mod infer;
 mod menu;
 mod pose;
+mod utils;
 
 #[derive(States, Clone, Eq, PartialEq, Debug, Hash, Default)]
 #[states(scoped_entities)]
@@ -52,7 +52,7 @@ fn main() {
         games::flag_raise::FlagRaisePlugin,
         games::pose_debug::PoseDebugPlugin,
     ))
-    .add_systems(Startup, audio::pitch::setup_beeps)
+    .add_systems(Startup, utils::pitch::setup_beeps)
     .init_state::<AppState>()
     .insert_resource(args)
     .run();
