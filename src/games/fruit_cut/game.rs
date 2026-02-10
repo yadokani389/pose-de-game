@@ -425,7 +425,7 @@ pub fn check_fruit_slicing(
                 }
 
                 player_combo.increment(elapsed);
-                spawn_floating_text_popup(
+                let popup_entity = spawn_floating_text_popup(
                     &mut commands,
                     fruit_pos,
                     format!("+{}", final_score),
@@ -433,6 +433,7 @@ pub fn check_fruit_slicing(
                     None,
                     64.0,
                 );
+                commands.entity(popup_entity).insert(FruitCutEntity);
 
                 commands.entity(entity).despawn();
             }
@@ -441,7 +442,7 @@ pub fn check_fruit_slicing(
 
     for (entity, _bomb, transform) in bomb_query.iter() {
         let bomb_pos = transform.translation.truncate();
-        let radius = 35.0;
+        let radius = 45.0;
 
         let mut hit = false;
         let mut hitting_owner = None;

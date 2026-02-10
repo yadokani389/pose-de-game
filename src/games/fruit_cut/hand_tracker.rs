@@ -166,7 +166,8 @@ pub fn update_hand_trackers(
                 }
             }
 
-            people_with_centers.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            people_with_centers
+                .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
             trackers.left_player_id = None;
             trackers.right_player_id = None;
