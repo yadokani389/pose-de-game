@@ -1,8 +1,10 @@
-use bevy::prelude::*;
 use std::collections::VecDeque;
 
-use super::{game_world_size, hand_tracker::HandTrackers};
+use bevy::prelude::*;
+
 use crate::utils::spawn_floating_text_popup;
+
+use super::{game_world_size, hand_tracker::HandTrackers};
 
 pub const GAME_DURATION: f32 = 60.0;
 pub const GRAVITY: f32 = 600.0;
@@ -395,48 +397,45 @@ pub fn check_fruit_slicing(
                 continue;
             }
 
-            if let Some(velocity) = hand_trail.velocity() {
-                if velocity.length() >= SLICE_MIN_VELOCITY {
-                    if check_trail_intersection(&hand_trail.trail, fruit_pos, radius) {
-                        sliced = true;
-                        slicing_owner = Some(hand_trail.owner);
-                        break;
-                    }
-                }
+            if let Some(velocity) = hand_trail.velocity()
+                && velocity.length() >= SLICE_MIN_VELOCITY
+                && check_trail_intersection(&hand_trail.trail, fruit_pos, radius)
+            {
+                sliced = true;
+                slicing_owner = Some(hand_trail.owner);
+                break;
             }
         }
 
-        if sliced {
-            if let Some(owner) = slicing_owner {
-                let player_combo = combo.get_mut(owner);
-                let base_score = fruit.fruit_type.score();
-                let multiplier = player_combo.get_multiplier();
-                let final_score = (base_score as f32 * multiplier) as u32;
+        if sliced && let Some(owner) = slicing_owner {
+            let player_combo = combo.get_mut(owner);
+            let base_score = fruit.fruit_type.score();
+            let multiplier = player_combo.get_multiplier();
+            let final_score = (base_score as f32 * multiplier) as u32;
 
-                match owner {
-                    PlayerSide::Left => {
-                        scoreboard.left_score += final_score;
-                        scoreboard.left_total_sliced += 1;
-                    }
-                    PlayerSide::Right => {
-                        scoreboard.right_score += final_score;
-                        scoreboard.right_total_sliced += 1;
-                    }
+            match owner {
+                PlayerSide::Left => {
+                    scoreboard.left_score += final_score;
+                    scoreboard.left_total_sliced += 1;
                 }
-
-                player_combo.increment(elapsed);
-                let popup_entity = spawn_floating_text_popup(
-                    &mut commands,
-                    fruit_pos,
-                    format!("+{}", final_score),
-                    fruit.fruit_type.color(),
-                    None,
-                    64.0,
-                );
-                commands.entity(popup_entity).insert(FruitCutEntity);
-
-                commands.entity(entity).despawn();
+                PlayerSide::Right => {
+                    scoreboard.right_score += final_score;
+                    scoreboard.right_total_sliced += 1;
+                }
             }
+
+            player_combo.increment(elapsed);
+            let popup_entity = spawn_floating_text_popup(
+                &mut commands,
+                fruit_pos,
+                format!("+{}", final_score),
+                fruit.fruit_type.color(),
+                None,
+                64.0,
+            );
+            commands.entity(popup_entity).insert(FruitCutEntity);
+
+            commands.entity(entity).despawn();
         }
     }
 
@@ -458,41 +457,38 @@ pub fn check_fruit_slicing(
                 continue;
             }
 
-            if let Some(velocity) = hand_trail.velocity() {
-                if velocity.length() >= SLICE_MIN_VELOCITY {
-                    if check_trail_intersection(&hand_trail.trail, bomb_pos, radius) {
-                        hit = true;
-                        hitting_owner = Some(hand_trail.owner);
-                        break;
-                    }
-                }
+            if let Some(velocity) = hand_trail.velocity()
+                && velocity.length() >= SLICE_MIN_VELOCITY
+                && check_trail_intersection(&hand_trail.trail, bomb_pos, radius)
+            {
+                hit = true;
+                hitting_owner = Some(hand_trail.owner);
+                break;
             }
         }
 
-        if hit {
-            if let Some(owner) = hitting_owner {
-                match owner {
-                    PlayerSide::Left => {
-                        scoreboard.left_score = scoreboard.left_score.saturating_sub(50);
-                        scoreboard.left_bombs_hit += 1;
-                        combo.left.reset();
-                    }
-                    PlayerSide::Right => {
-                        scoreboard.right_score = scoreboard.right_score.saturating_sub(50);
-                        scoreboard.right_bombs_hit += 1;
-                        combo.right.reset();
-                    }
+        if hit && let Some(owner) = hitting_owner {
+            match owner {
+                PlayerSide::Left => {
+                    scoreboard.left_score = scoreboard.left_score.saturating_sub(50);
+                    scoreboard.left_bombs_hit += 1;
+                    combo.left.reset();
                 }
-                spawn_floating_text_popup(
-                    &mut commands,
-                    bomb_pos,
-                    "×",
-                    Color::srgb(1.0, 0.1, 0.1),
-                    None,
-                    128.0,
-                );
-                commands.entity(entity).despawn();
+                PlayerSide::Right => {
+                    scoreboard.right_score = scoreboard.right_score.saturating_sub(50);
+                    scoreboard.right_bombs_hit += 1;
+                    combo.right.reset();
+                }
             }
+            spawn_floating_text_popup(
+                &mut commands,
+                bomb_pos,
+                "×",
+                Color::srgb(1.0, 0.1, 0.1),
+                None,
+                128.0,
+            );
+            commands.entity(entity).despawn();
         }
     }
 }

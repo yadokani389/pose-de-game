@@ -79,21 +79,11 @@ impl HandTrail {
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct HandTrackers {
     pub hands: Vec<HandTrail>,
     pub left_player_id: Option<u64>,
     pub right_player_id: Option<u64>,
-}
-
-impl Default for HandTrackers {
-    fn default() -> Self {
-        Self {
-            hands: Vec::new(),
-            left_player_id: None,
-            right_player_id: None,
-        }
-    }
 }
 
 pub fn update_hand_trackers(
@@ -144,16 +134,16 @@ pub fn update_hand_trackers(
     } else {
         let current_ids: Vec<u64> = people.iter().map(|p| p.id).collect();
 
-        if let Some(left_id) = trackers.left_player_id {
-            if !current_ids.contains(&left_id) {
-                trackers.left_player_id = None;
-            }
+        if let Some(left_id) = trackers.left_player_id
+            && !current_ids.contains(&left_id)
+        {
+            trackers.left_player_id = None;
         }
 
-        if let Some(right_id) = trackers.right_player_id {
-            if !current_ids.contains(&right_id) {
-                trackers.right_player_id = None;
-            }
+        if let Some(right_id) = trackers.right_player_id
+            && !current_ids.contains(&right_id)
+        {
+            trackers.right_player_id = None;
         }
 
         if trackers.left_player_id.is_none() || trackers.right_player_id.is_none() {
@@ -256,12 +246,10 @@ pub fn update_hand_trackers(
                 } else {
                     Color::srgba(0.0, 0.0, 1.0, 0.6)
                 }
+            } else if detected.is_right {
+                Color::srgba(1.0, 0.5, 0.0, 0.6)
             } else {
-                if detected.is_right {
-                    Color::srgba(1.0, 0.5, 0.0, 0.6)
-                } else {
-                    Color::srgba(0.7, 1.0, 0.2, 0.6)
-                }
+                Color::srgba(0.7, 1.0, 0.2, 0.6)
             };
 
             let mut trail = HandTrail::new(color, detected.owner, timestamp);

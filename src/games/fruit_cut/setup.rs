@@ -344,10 +344,10 @@ pub fn handle_setup_phase(
             commands.entity(entity).despawn();
         }
 
-        if settings.player_count == 2 {
-            if let Ok(mut visibility) = center_line.single_mut() {
-                *visibility = Visibility::Visible;
-            }
+        if settings.player_count == 2
+            && let Ok(mut visibility) = center_line.single_mut()
+        {
+            *visibility = Visibility::Visible;
         }
     }
 }

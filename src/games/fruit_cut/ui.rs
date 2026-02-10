@@ -52,19 +52,19 @@ pub fn update_hud(
             spawn_single_player_hud(&mut commands, &ui_font, &scoreboard);
         }
 
-        if scoreboard.is_changed() {
-            if let Ok(mut text) = text_queries.p0().single_mut() {
-                *text = Text::new(format!("Score: {}", scoreboard.left_score));
-            }
+        if scoreboard.is_changed()
+            && let Ok(mut text) = text_queries.p0().single_mut()
+        {
+            *text = Text::new(format!("Score: {}", scoreboard.left_score));
         }
 
-        if combo.is_changed() {
-            if let Ok(mut text) = text_queries.p1().single_mut() {
-                if combo.left.current_combo > 0 {
-                    *text = Text::new(format!("COMBO x{}", combo.left.current_combo));
-                } else {
-                    *text = Text::new("");
-                }
+        if combo.is_changed()
+            && let Ok(mut text) = text_queries.p1().single_mut()
+        {
+            if combo.left.current_combo > 0 {
+                *text = Text::new(format!("COMBO x{}", combo.left.current_combo));
+            } else {
+                *text = Text::new("");
             }
         }
     } else {
@@ -99,11 +99,11 @@ pub fn update_hud(
         }
     }
 
-    if game_timer.is_changed() {
-        if let Ok(mut text) = text_queries.p6().single_mut() {
-            let remaining = GAME_DURATION - game_timer.elapsed;
-            *text = Text::new(format!("Time: {:.0}s", remaining.max(0.0)));
-        }
+    if game_timer.is_changed()
+        && let Ok(mut text) = text_queries.p6().single_mut()
+    {
+        let remaining = GAME_DURATION - game_timer.elapsed;
+        *text = Text::new(format!("Time: {:.0}s", remaining.max(0.0)));
     }
 }
 
