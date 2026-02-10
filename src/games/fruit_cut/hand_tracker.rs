@@ -280,7 +280,7 @@ fn estimate_person_center(keypoints: &[Option<[f64; 2]>]) -> Option<f32> {
     const LEFT_HIP: usize = 11;
     const RIGHT_HIP: usize = 12;
 
-    if let (Some(Some(nose))) = keypoints.get(0) {
+    if let Some(Some(nose)) = keypoints.get(0) {
         return Some(nose[0] as f32);
     }
 

@@ -6,7 +6,7 @@ use crate::utils::spawn_floating_text_popup;
 
 pub const GAME_DURATION: f32 = 60.0;
 pub const GRAVITY: f32 = 600.0;
-const SLICE_MIN_VELOCITY: f32 = 400.0;
+const SLICE_MIN_VELOCITY: f32 = 0.0;
 pub const MIN_PLAYERS: usize = 1;
 pub const MAX_PLAYERS: usize = 2;
 
@@ -431,7 +431,7 @@ pub fn check_fruit_slicing(
                     format!("+{}", final_score),
                     fruit.fruit_type.color(),
                     None,
-                    32.0,
+                    64.0,
                 );
 
                 commands.entity(entity).despawn();
@@ -482,6 +482,14 @@ pub fn check_fruit_slicing(
                         combo.right.reset();
                     }
                 }
+                spawn_floating_text_popup(
+                    &mut commands,
+                    bomb_pos,
+                    "×",
+                    Color::srgb(1.0, 0.1, 0.1),
+                    None,
+                    128.0,
+                );
                 commands.entity(entity).despawn();
             }
         }
