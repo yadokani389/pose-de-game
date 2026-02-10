@@ -142,6 +142,20 @@ pub fn update_hand_trackers(
             }
         }
     } else {
+        let current_ids: Vec<u64> = people.iter().map(|p| p.id).collect();
+
+        if let Some(left_id) = trackers.left_player_id {
+            if !current_ids.contains(&left_id) {
+                trackers.left_player_id = None;
+            }
+        }
+
+        if let Some(right_id) = trackers.right_player_id {
+            if !current_ids.contains(&right_id) {
+                trackers.right_player_id = None;
+            }
+        }
+
         if trackers.left_player_id.is_none() || trackers.right_player_id.is_none() {
             let mut people_with_centers: Vec<(u64, f32)> = Vec::new();
 
@@ -265,6 +279,10 @@ fn estimate_person_center(keypoints: &[Option<[f64; 2]>]) -> Option<f32> {
     const RIGHT_SHOULDER: usize = 6;
     const LEFT_HIP: usize = 11;
     const RIGHT_HIP: usize = 12;
+
+    if let (Some(Some(nose))) = keypoints.get(0) {
+        return Some(nose[0] as f32);
+    }
 
     if let (Some(Some(left)), Some(Some(right))) =
         (keypoints.get(LEFT_SHOULDER), keypoints.get(RIGHT_SHOULDER))
