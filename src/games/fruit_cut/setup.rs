@@ -43,12 +43,7 @@ pub fn is_setup(phase: Res<FruitCutPhase>) -> bool {
     *phase == FruitCutPhase::Setup
 }
 
-pub fn spawn_setup_ui(
-    commands: &mut Commands,
-    ui_font: &UiFont,
-    settings: &FruitCutSettings,
-    window: &Window,
-) {
+pub fn spawn_setup_ui(commands: &mut Commands, ui_font: &UiFont, settings: &FruitCutSettings) {
     commands
         .spawn((
             SetupText,
@@ -203,7 +198,7 @@ pub fn setup(
         FruitCutEntity,
     ));
 
-    spawn_setup_ui(&mut commands, &ui_font, &settings, &window);
+    spawn_setup_ui(&mut commands, &ui_font, &settings);
 }
 
 pub fn cleanup(mut commands: Commands, entities: Query<Entity, With<FruitCutEntity>>) {

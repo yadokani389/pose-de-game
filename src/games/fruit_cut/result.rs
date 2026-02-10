@@ -540,7 +540,6 @@ pub fn handle_result_input(
     fruits: Query<Entity, With<Fruit>>,
     bombs: Query<Entity, With<Bomb>>,
     popups: Query<Entity, With<FloatingTextPopup>>,
-    window: Single<&Window>,
 ) {
     if input.just_pressed(KeyCode::Space) {
         for entity in &result_ui {
@@ -559,7 +558,6 @@ pub fn handle_result_input(
             &fruits,
             &bombs,
             &popups,
-            &window,
         );
     }
 }
@@ -589,7 +587,6 @@ pub fn button_system(
     fruits: Query<Entity, With<Fruit>>,
     bombs: Query<Entity, With<Bomb>>,
     popups: Query<Entity, With<FloatingTextPopup>>,
-    window: Single<&Window>,
 ) {
     for (interaction, mut color, mut border_color, retry, menu) in &mut query {
         match *interaction {
@@ -614,7 +611,6 @@ pub fn button_system(
                         &fruits,
                         &bombs,
                         &popups,
-                        &window,
                     );
                 } else if menu.is_some() {
                     next_state.set(AppState::MainMenu);
@@ -645,7 +641,6 @@ fn reset_game(
     fruits: &Query<Entity, With<Fruit>>,
     bombs: &Query<Entity, With<Bomb>>,
     popups: &Query<Entity, With<FloatingTextPopup>>,
-    window: &Window,
 ) {
     for entity in fruits.iter() {
         commands.entity(entity).despawn();
@@ -666,5 +661,5 @@ fn reset_game(
     **hand_trackers = HandTrackers::default();
     commands.remove_resource::<GameResult>();
 
-    spawn_setup_ui(commands, ui_font, settings, window);
+    spawn_setup_ui(commands, ui_font, settings);
 }
