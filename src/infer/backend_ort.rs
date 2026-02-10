@@ -52,8 +52,6 @@ impl OrtBackend {
         let (pose, ep_name_pose) = Self::build_session(
             pose,
             #[cfg(feature = "coreml")]
-            &coreml,
-            #[cfg(feature = "coreml")]
             coreml_available,
             &cuda,
             cuda_available,
@@ -61,8 +59,6 @@ impl OrtBackend {
         )?;
         let (seg, ep_name_seg) = Self::build_session(
             seg,
-            #[cfg(feature = "coreml")]
-            &coreml,
             #[cfg(feature = "coreml")]
             coreml_available,
             &cuda,
@@ -83,7 +79,6 @@ impl OrtBackend {
 
     fn build_session(
         model: &ModelData,
-        #[cfg(feature = "coreml")] coreml: &CoreMLExecutionProvider,
         #[cfg(feature = "coreml")] coreml_available: bool,
         cuda: &CUDAExecutionProvider,
         cuda_available: bool,
