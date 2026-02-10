@@ -1,8 +1,14 @@
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::{
+    AppState,
+    assets::UiFont,
     pose::PeopleDataRes,
-    utils::pitch::{BeepPalette, play_beep},
+    utils::{
+        pitch::{BeepPalette, play_beep},
+        spawn_floating_text_popup,
+    },
 };
 
 use super::settings::{FlagRaisePhase, FlagRaiseSettings, GameMode, MAX_PLAYERS};
@@ -43,6 +49,14 @@ const DUAL_COMMAND_START_SECS: f32 = 15.0;
 const COLOR_MISMATCH_CHANCE: f32 = 0.5;
 const TURN_BEEP_FIRST: f32 = 1.0 / 3.0;
 const TURN_BEEP_SECOND: f32 = 2.0 / 3.0;
+const SLOT_JUDGE_POPUP_Y: f32 = 120.0;
+const SLOT_JUDGE_POPUP_FONT_SIZE: f32 = 108.0;
+
+#[derive(Clone, Copy, Debug)]
+enum SlotJudgeResult {
+    Success,
+    Failure,
+}
 
 #[derive(Resource)]
 pub struct GameTimer {
@@ -126,6 +140,8 @@ pub fn advance_turn_and_score(
     people: Res<PeopleDataRes>,
     settings: Res<FlagRaiseSettings>,
     beeps: Res<BeepPalette>,
+    ui_font: Res<UiFont>,
+    window: Query<&Window, With<PrimaryWindow>>,
     mut scoreboard: ResMut<Scoreboard>,
     mut command: ResMut<CommandState>,
     mut rng: ResMut<CommandRng>,
@@ -159,6 +175,7 @@ pub fn advance_turn_and_score(
     }
 
     let assignments = assign_people_to_slots(&people, settings.player_count);
+    let mut slot_results = [None; MAX_PLAYERS];
     let mut failed_slot = None;
     let mut any_correct = false;
     let mut any_wrong = false;
@@ -174,9 +191,11 @@ pub fn advance_turn_and_score(
         match outcome {
             Some(true) => {
                 scoreboard.scores[slot_index] = scoreboard.scores[slot_index].saturating_add(1);
+                slot_results[slot_index] = Some(SlotJudgeResult::Success);
                 any_correct = true;
             }
             Some(false) | None => {
+                slot_results[slot_index] = Some(SlotJudgeResult::Failure);
                 any_wrong = true;
                 if settings.mode == GameMode::SuddenDeath && failed_slot.is_none() {
                     failed_slot = Some(slot_index);
@@ -184,6 +203,8 @@ pub fn advance_turn_and_score(
             }
         }
     }
+
+    spawn_slot_judge_popups(&mut commands, &window, &settings, &ui_font, &slot_results);
 
     if any_wrong {
         play_beep(&mut commands, beeps.wrong.clone());
@@ -213,6 +234,49 @@ pub fn advance_turn_and_score(
     command.timer = Timer::from_seconds(next_turn_seconds, TimerMode::Once);
     command.dirty = true;
     command.beep_state = TurnBeepState::default();
+}
+
+fn spawn_slot_judge_popups(
+    commands: &mut Commands,
+    window: &Query<&Window, With<PrimaryWindow>>,
+    settings: &FlagRaiseSettings,
+    ui_font: &UiFont,
+    slot_results: &[Option<SlotJudgeResult>; MAX_PLAYERS],
+) {
+    if settings.player_count == 0 {
+        return;
+    }
+    let Ok(window) = window.single() else {
+        return;
+    };
+
+    let frame_size = Vec2::new(window.resolution.width(), window.resolution.height());
+    let half_width = frame_size.x * 0.5;
+    let slot_width = frame_size.x / settings.player_count as f32;
+
+    for slot_index in 0..settings.player_count {
+        let Some(slot_result) = slot_results[slot_index] else {
+            continue;
+        };
+
+        let (label, color) = match slot_result {
+            SlotJudgeResult::Success => ("○", Color::srgb(0.42, 1.0, 0.62)),
+            SlotJudgeResult::Failure => ("×", Color::srgb(1.0, 0.46, 0.46)),
+        };
+
+        let x = -half_width + slot_width * (slot_index as f32 + 0.5);
+        let popup_entity = spawn_floating_text_popup(
+            commands,
+            Vec2::new(x, SLOT_JUDGE_POPUP_Y),
+            label,
+            color,
+            Some(ui_font.0.clone()),
+            SLOT_JUDGE_POPUP_FONT_SIZE,
+        );
+        commands
+            .entity(popup_entity)
+            .insert(DespawnOnExit(AppState::FlagRaise));
+    }
 }
 
 fn assign_people_to_slots(people: &PeopleDataRes, player_count: usize) -> Vec<Option<usize>> {

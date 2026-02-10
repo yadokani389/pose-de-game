@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use crate::{
     AppState,
     pose::{disable_pose_render, disable_pose_runtime, enable_pose_render, enable_pose_runtime},
+    utils::update_floating_text_popups,
 };
 
 use settings::{is_playing, is_result, is_setup};
@@ -60,6 +61,7 @@ impl Plugin for FlagRaisePlugin {
                     .run_if(is_playing)
                     .run_if(resource_exists::<game::GameTimer>),
                 ui::update_text_positions.run_if(is_playing),
+                update_floating_text_popups,
                 result::spawn_result_ui.run_if(is_result),
                 result::result_input.run_if(is_result),
                 result::button_system.run_if(is_result),

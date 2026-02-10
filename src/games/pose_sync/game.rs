@@ -18,7 +18,7 @@ pub const GAME_LIMIT_SECS: f32 = 60.0;
 pub const SEQUENCE_LEN: usize = 3;
 const START_DELAY_SECS: f32 = 1.0;
 const REPEAT_JUDGE_DELAY_SECS: f32 = 0.18;
-const SLOT_JUDGE_POPUP_FONT_SIZE: f32 = 58.0;
+const SLOT_JUDGE_POPUP_FONT_SIZE: f32 = 108.0;
 const SLOT_JUDGE_POPUP_Y: f32 = -40.0;
 const POINT_SCORE_WEIGHT: f32 = 0.65;
 const ANGLE_SCORE_WEIGHT: f32 = 0.35;
@@ -95,7 +95,7 @@ pub enum PoseTemplateId {
 }
 
 impl CommandState {
-    pub fn active_pose(self: &Self) -> PoseTemplateId {
+    pub fn active_pose(&self) -> PoseTemplateId {
         self.sequence[self.step_index]
     }
 }
@@ -810,8 +810,8 @@ fn spawn_slot_judge_popups(
         };
 
         let (label, color) = match slot_result {
-            SlotJudgeResult::Success => ("成功!", Color::srgb(0.42, 1.0, 0.62)),
-            SlotJudgeResult::Failure => ("ミス!", Color::srgb(1.0, 0.46, 0.46)),
+            SlotJudgeResult::Success => ("○", Color::srgb(0.42, 1.0, 0.62)),
+            SlotJudgeResult::Failure => ("×", Color::srgb(1.0, 0.46, 0.46)),
         };
 
         let x = -half_width + slot_width * (slot_index as f32 + 0.5);
@@ -1065,12 +1065,8 @@ fn normalize_keypoints(
         })
         .collect();
 
-    let Some(left) = points.get(5).and_then(|point| *point) else {
-        return None;
-    };
-    let Some(right) = points.get(6).and_then(|point| *point) else {
-        return None;
-    };
+    let left = points.get(5).and_then(|point| *point)?;
+    let right = points.get(6).and_then(|point| *point)?;
 
     let shoulder_direction = right - left;
     let shoulder_angle = shoulder_direction.y.atan2(shoulder_direction.x);
