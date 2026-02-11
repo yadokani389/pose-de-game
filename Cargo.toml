@@ -10,7 +10,7 @@ openvino = ["dep:openvino"]
 
 [dependencies]
 anyhow = "1.0.100"
-bevy = "0.17.3"
+bevy = { version = "0.17.3", features = ["mp3"] }
 clap = { version = "4.5.53", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_bytes = "0.11"

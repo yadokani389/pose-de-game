@@ -1,7 +1,8 @@
+use bevy::audio::Volume;
 use bevy::prelude::*;
 use bevy_flair::prelude::*;
 
-use crate::{AppState, pose::disable_pose_runtime};
+use crate::{AppState, assets::AppBgm, pose::disable_pose_runtime};
 
 const GRID_COLUMNS: usize = 3;
 
@@ -9,21 +10,26 @@ pub struct GameMenuPlugin;
 
 impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(AppState::MainMenu),
-            (disable_pose_runtime, setup_menu),
-        )
-        .add_systems(
-            Update,
-            (
-                menu_keyboard_navigation,
-                menu_keyboard_activate,
-                menu_pointer_interaction,
-                apply_selection_classes,
+        app.init_resource::<BgmState>()
+            .add_systems(Startup, setup_bgm)
+            .add_systems(
+                OnEnter(AppState::MainMenu),
+                (disable_pose_runtime, setup_menu),
             )
-                .chain()
-                .run_if(in_state(AppState::MainMenu)),
-        );
+            .add_systems(
+                Update,
+                (
+                    menu_keyboard_navigation,
+                    menu_keyboard_activate,
+                    menu_bgm_toggle_keyboard,
+                    menu_pointer_interaction,
+                    menu_bgm_toggle_pointer_interaction,
+                    apply_selection_classes,
+                    update_bgm_toggle_label,
+                )
+                    .chain()
+                    .run_if(in_state(AppState::MainMenu)),
+            );
     }
 }
 
@@ -36,6 +42,18 @@ struct MenuCard {
 struct MenuSelection {
     index: usize,
 }
+
+#[derive(Resource, Default)]
+struct BgmState {
+    enabled: bool,
+    entity: Option<Entity>,
+}
+
+#[derive(Component)]
+struct BgmToggleButton;
+
+#[derive(Component)]
+struct BgmToggleLabel;
 
 #[derive(Clone, Copy)]
 enum MenuAction {
@@ -141,7 +159,7 @@ const MENU_ENTRIES: &[MenuEntry] = &[
     },
 ];
 
-fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, bgm_state: Res<BgmState>) {
     commands.spawn((Camera2d, DespawnOnExit(AppState::MainMenu)));
 
     let selected = first_enabled_index();
@@ -152,7 +170,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
         .iter()
         .filter(|entry| entry.action.is_some())
         .count();
-    let hint = format!("利用可能: {available}/{total} ・ ↑↓←→で選択 / Enterで開始");
+    let hint = format!("利用可能: {available}/{total} ・ ↑↓←→で選択 / Enterで開始 / MでBGM切替");
 
     commands
         .spawn((
@@ -188,8 +206,22 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>) {
                 .spawn((Node::default(), ClassList::new("menu-footer")))
                 .with_children(|footer| {
                     footer.spawn((Text::new(hint), ClassList::new("menu-hint")));
+                    footer
+                        .spawn((Button, BgmToggleButton, ClassList::new("bgm-toggle")))
+                        .with_children(|button| {
+                            button.spawn((
+                                Text::new(bgm_toggle_text(bgm_state.enabled)),
+                                BgmToggleLabel,
+                                ClassList::new("bgm-toggle-label"),
+                            ));
+                        });
                 });
         });
+}
+
+fn setup_bgm(mut commands: Commands, bgm: Res<AppBgm>, mut bgm_state: ResMut<BgmState>) {
+    bgm_state.enabled = true;
+    bgm_state.entity = Some(spawn_bgm(&mut commands, bgm.0.clone()));
 }
 
 fn spawn_menu_card(
@@ -285,6 +317,30 @@ fn menu_pointer_interaction(
     }
 }
 
+fn menu_bgm_toggle_pointer_interaction(
+    mut commands: Commands,
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<BgmToggleButton>)>,
+    bgm: Res<AppBgm>,
+    mut bgm_state: ResMut<BgmState>,
+) {
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            toggle_bgm(&mut commands, &bgm, &mut bgm_state);
+        }
+    }
+}
+
+fn menu_bgm_toggle_keyboard(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    bgm: Res<AppBgm>,
+    mut bgm_state: ResMut<BgmState>,
+) {
+    if keyboard_input.just_pressed(KeyCode::KeyM) {
+        toggle_bgm(&mut commands, &bgm, &mut bgm_state);
+    }
+}
+
 fn apply_selection_classes(
     selection: Res<MenuSelection>,
     mut cards: Query<(&MenuCard, &mut ClassList)>,
@@ -299,6 +355,19 @@ fn apply_selection_classes(
         } else {
             classes.remove("is-selected");
         }
+    }
+}
+
+fn update_bgm_toggle_label(
+    bgm_state: Res<BgmState>,
+    mut labels: Query<&mut Text, With<BgmToggleLabel>>,
+) {
+    if !bgm_state.is_changed() {
+        return;
+    }
+
+    for mut label in &mut labels {
+        *label = Text::new(bgm_toggle_text(bgm_state.enabled));
     }
 }
 
@@ -345,4 +414,27 @@ fn action_for(index: usize) -> Option<MenuAction> {
 
 fn pressed_any(keyboard_input: &ButtonInput<KeyCode>, keys: &[KeyCode]) -> bool {
     keys.iter().any(|key| keyboard_input.just_pressed(*key))
+}
+
+fn toggle_bgm(commands: &mut Commands, bgm: &AppBgm, bgm_state: &mut BgmState) {
+    bgm_state.enabled = !bgm_state.enabled;
+
+    if bgm_state.enabled {
+        bgm_state.entity = Some(spawn_bgm(commands, bgm.0.clone()));
+    } else if let Some(entity) = bgm_state.entity.take() {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn spawn_bgm(commands: &mut Commands, bgm: Handle<AudioSource>) -> Entity {
+    commands
+        .spawn((
+            AudioPlayer::new(bgm),
+            PlaybackSettings::LOOP.with_volume(Volume::Linear(0.35)),
+        ))
+        .id()
+}
+
+fn bgm_toggle_text(enabled: bool) -> &'static str {
+    if enabled { "BGM: ON" } else { "BGM: OFF" }
 }
