@@ -18,6 +18,7 @@ pub enum AppState {
     #[default]
     MainMenu,
     AirHockey,
+    EndlessRunner,
     FlagRaise,
     PoseSync,
     FruitCut,
@@ -51,6 +52,7 @@ fn main() {
         assets::EmbeddedAssetsPlugin,
         menu::GameMenuPlugin,
         games::air_hockey::AirHockeyPlugin,
+        games::endless_runner::EndlessRunnerPlugin,
         games::flag_raise::FlagRaisePlugin,
         games::pose_sync::PoseSyncPlugin,
         games::fruit_cut::FruitCutPlugin,

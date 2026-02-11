@@ -40,6 +40,7 @@ struct MenuSelection {
 #[derive(Clone, Copy)]
 enum MenuAction {
     StartAirHockey,
+    StartEndlessRunner,
     StartFlagRaise,
     StartPoseSync,
     StartFruitCut,
@@ -89,6 +90,13 @@ const MENU_ENTRIES: &[MenuEntry] = &[
         summary: "手を振ってフルーツを切る",
         status: "利用可",
         action: Some(MenuAction::StartFruitCut),
+    },
+    MenuEntry {
+        title: "エンドレスランナー",
+        badge: "PLAY",
+        summary: "体を左右に動かして障害物を回避",
+        status: "利用可",
+        action: Some(MenuAction::StartEndlessRunner),
     },
     MenuEntry {
         title: "Coming Soon 04",
@@ -305,6 +313,7 @@ fn apply_selection_classes(
 fn apply_action(action: MenuAction, next_state: &mut NextState<AppState>) {
     match action {
         MenuAction::StartAirHockey => next_state.set(AppState::AirHockey),
+        MenuAction::StartEndlessRunner => next_state.set(AppState::EndlessRunner),
         MenuAction::StartFlagRaise => next_state.set(AppState::FlagRaise),
         MenuAction::StartPoseSync => next_state.set(AppState::PoseSync),
         MenuAction::StartFruitCut => next_state.set(AppState::FruitCut),
