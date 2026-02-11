@@ -58,9 +58,10 @@ struct MaskSprite;
 
 fn handle_escape_to_menu(
     input: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    if input.just_pressed(KeyCode::Escape) {
+    if input.just_pressed(KeyCode::Escape) || mouse_buttons.just_pressed(MouseButton::Back) {
         next_state.set(AppState::MainMenu);
     }
 }

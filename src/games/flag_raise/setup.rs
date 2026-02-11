@@ -80,9 +80,10 @@ pub(super) fn return_to_setup(
 
 pub(super) fn handle_escape_to_menu(
     input: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    if input.just_pressed(KeyCode::Escape) {
+    if input.just_pressed(KeyCode::Escape) || mouse_buttons.just_pressed(MouseButton::Back) {
         next_state.set(AppState::MainMenu);
     }
 }
@@ -292,7 +293,7 @@ pub(super) fn spawn_setup_ui(
 
     commands.spawn((
         SetupUi,
-        Text2d::new("↑↓ 人数  ←→ 難易度  M モード  Enter 開始  Esc 戻る"),
+        Text2d::new("↑↓ 人数  ←→ 難易度  M モード  Enter 開始  Esc/MouseBack 戻る"),
         TextFont {
             font: ui_font.0.clone(),
             font_size: SETUP_HINT_SIZE,

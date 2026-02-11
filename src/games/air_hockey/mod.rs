@@ -508,7 +508,7 @@ fn setup(
 
     commands.spawn((
         KeymapText,
-        Text2d::new("Esc: Menu / O: Overlay / Left/Right: Hand"),
+        Text2d::new("Esc/MouseBack: Menu / O: Overlay / Left/Right: Hand"),
         TextFont {
             font: ui_font.0.clone(),
             font_size: KEYMAP_FONT_SIZE,
@@ -580,9 +580,10 @@ fn setup(
 
 fn handle_escape_to_menu(
     input: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    if input.just_pressed(KeyCode::Escape) {
+    if input.just_pressed(KeyCode::Escape) || mouse_buttons.just_pressed(MouseButton::Back) {
         next_state.set(AppState::MainMenu);
     }
 }

@@ -120,7 +120,7 @@ pub fn spawn_setup_ui(commands: &mut Commands, ui_font: &UiFont, settings: &Game
             ));
 
             parent.spawn((
-                Text::new("Enter: 開始  Esc: 戻る"),
+                Text::new("Enter: 開始  Esc/MouseBack: 戻る"),
                 TextFont {
                     font: ui_font.0.clone(),
                     font_size: SETUP_HINT_SIZE,
@@ -242,9 +242,10 @@ pub fn handle_setup_phase(
 
 pub fn handle_escape_to_menu(
     input: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    if input.just_pressed(KeyCode::Escape) {
+    if input.just_pressed(KeyCode::Escape) || mouse_buttons.just_pressed(MouseButton::Back) {
         next_state.set(AppState::MainMenu);
     }
 }
