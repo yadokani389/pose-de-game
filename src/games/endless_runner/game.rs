@@ -15,7 +15,7 @@ use super::{CAMERA_USED_MARGIN, CAMERA_USED_PORTION, game_world_size, ui};
 
 const NUM_LANES: usize = 3;
 const SPAWN_DISTANCE: f32 = 600.0;
-const DESPAWN_DISTANCE: f32 = -300.0;
+const DESPAWN_DISTANCE: f32 = -500.0;
 const SPAWN_INTERVAL: f32 = 1.0;
 const MIN_SPAWN_INTERVAL: f32 = 0.4;
 const LANE_TRANSITION_SPEED: f32 = 8.0;
@@ -28,9 +28,6 @@ const LANE_WIDTH_RATIO: f32 = SIZE_UNIT * 3.2;
 const CAMERA_OVERLAY_ALPHA_LANE: f32 = 0.15;
 const CAMERA_OVERLAY_ALPHA_DARK: f32 = 0.6;
 const CAMERA_OVERLAY_Z: f32 = 0.5;
-
-const NOSE_MARKER_SIZE: f32 = 20.0;
-const NOSE_MARKER_Z: f32 = 15.0;
 
 #[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EndlessRunnerPhase {
@@ -142,13 +139,8 @@ pub struct LaneLayout {
 pub struct PlayerTargets {
     pub player1_lane: Option<usize>,
     pub player2_lane: Option<usize>,
-    pub player1_nose: Option<(f32, f32)>,
-    pub player2_nose: Option<(f32, f32)>,
-}
-
-#[derive(Component)]
-pub struct NoseMarker {
-    pub player_id: PlayerId,
+    pub player1_y: Option<f32>,
+    pub player2_y: Option<f32>,
 }
 
 #[derive(Component)]
@@ -266,8 +258,6 @@ pub fn setup(
 
     spawn_lanes_and_overlays(&mut commands, &lane_layout, &settings);
 
-    spawn_nose_markers(&mut commands, &settings);
-
     spawn_hud(&mut commands, &ui_font, &settings);
 
     super::setup::setup_ui(&mut commands, &ui_font, &settings);
@@ -376,56 +366,6 @@ pub fn spawn_lanes_and_overlays(
                 DespawnOnExit(AppState::EndlessRunner),
             ));
         }
-    }
-}
-
-pub fn spawn_nose_markers(commands: &mut Commands, settings: &GameSettings) {
-    commands
-        .spawn((
-            Sprite::from_color(
-                Color::srgba(1.0, 0.4, 0.7, 0.8),
-                Vec2::new(NOSE_MARKER_SIZE, NOSE_MARKER_SIZE),
-            ),
-            Transform::from_xyz(0.0, 0.0, NOSE_MARKER_Z),
-            Visibility::Hidden,
-            NoseMarker {
-                player_id: PlayerId::Player1,
-            },
-            DespawnOnExit(AppState::EndlessRunner),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Sprite::from_color(
-                    Color::srgba(0.0, 0.0, 0.0, 0.0),
-                    Vec2::new(NOSE_MARKER_SIZE * 0.5, NOSE_MARKER_SIZE * 0.5),
-                ),
-                Transform::from_xyz(0.0, 0.0, 0.1),
-            ));
-        });
-
-    if settings.num_players == 2 {
-        commands
-            .spawn((
-                Sprite::from_color(
-                    Color::srgba(1.0, 0.6, 0.2, 0.8),
-                    Vec2::new(NOSE_MARKER_SIZE, NOSE_MARKER_SIZE),
-                ),
-                Transform::from_xyz(0.0, 0.0, NOSE_MARKER_Z),
-                Visibility::Hidden,
-                NoseMarker {
-                    player_id: PlayerId::Player2,
-                },
-                DespawnOnExit(AppState::EndlessRunner),
-            ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Sprite::from_color(
-                        Color::srgba(0.0, 0.0, 0.0, 0.0),
-                        Vec2::new(NOSE_MARKER_SIZE * 0.5, NOSE_MARKER_SIZE * 0.5),
-                    ),
-                    Transform::from_xyz(0.0, 0.0, 0.1),
-                ));
-            });
     }
 }
 
@@ -591,9 +531,8 @@ pub fn update_player_target_lane(
     let assignments = assign_players(&people, &settings);
 
     if let Some((nose_x, nose_y)) = assignments.player1_nose {
-        targets.player1_nose = Some((nose_x as f32, nose_y as f32));
-
         let world_x = nose_to_world_x(nose_x as f32, &layout);
+        let world_y = nose_to_world_y(nose_y as f32, &layout);
 
         let center_x = if settings.num_players == 1 {
             0.0
@@ -603,52 +542,20 @@ pub fn update_player_target_lane(
 
         let lane = world_x_to_lane(world_x, center_x, layout.lane_width);
         targets.player1_lane = Some(lane);
+        targets.player1_y = Some(world_y);
     } else {
-        targets.player1_nose = None;
+        targets.player1_y = None;
     }
 
     if let Some((nose_x, nose_y)) = assignments.player2_nose {
-        targets.player2_nose = Some((nose_x as f32, nose_y as f32));
-
         let world_x = nose_to_world_x(nose_x as f32, &layout);
+        let world_y = nose_to_world_y(nose_y as f32, &layout);
 
         let lane = world_x_to_lane(world_x, layout.player2_center_x, layout.lane_width);
         targets.player2_lane = Some(lane);
+        targets.player2_y = Some(world_y);
     } else {
-        targets.player2_nose = None;
-    }
-}
-
-pub fn update_nose_markers(
-    targets: Res<PlayerTargets>,
-    layout: Option<Res<LaneLayout>>,
-    mut markers: Query<(&NoseMarker, &mut Transform, &mut Visibility)>,
-) {
-    let Some(layout) = layout else { return };
-
-    for (marker, mut transform, mut visibility) in markers.iter_mut() {
-        let nose_pos = match marker.player_id {
-            PlayerId::Player1 => targets.player1_nose,
-            PlayerId::Player2 => targets.player2_nose,
-        };
-
-        if let Some((nx, ny)) = nose_pos {
-            *visibility = Visibility::Visible;
-
-            let clamped_x = nx.clamp(CAMERA_USED_MARGIN, 1.0 - CAMERA_USED_MARGIN);
-            let clamped_y = ny.clamp(CAMERA_USED_MARGIN, 1.0 - CAMERA_USED_MARGIN);
-
-            let norm_x = (clamped_x - CAMERA_USED_MARGIN) / CAMERA_USED_PORTION;
-            let norm_y = (clamped_y - CAMERA_USED_MARGIN) / CAMERA_USED_PORTION;
-
-            let world_x = (norm_x - 0.5) * layout.game_width;
-            let world_y = (0.5 - norm_y) * layout.game_height;
-
-            transform.translation.x = world_x;
-            transform.translation.y = world_y;
-        } else {
-            *visibility = Visibility::Hidden;
-        }
+        targets.player2_y = None;
     }
 }
 
@@ -666,18 +573,20 @@ pub fn move_players(
             continue;
         }
 
-        match player.id {
+        let target_y = match player.id {
             PlayerId::Player1 => {
                 if let Some(lane) = targets.player1_lane {
                     player.target_lane = lane;
                 }
+                targets.player1_y
             }
             PlayerId::Player2 => {
                 if let Some(lane) = targets.player2_lane {
                     player.target_lane = lane;
                 }
+                targets.player2_y
             }
-        }
+        };
 
         let target_x = lane_to_x_for_player(
             player.target_lane,
@@ -686,11 +595,11 @@ pub fn move_players(
             settings.num_players,
         );
         let current_x = transform.translation.x;
-        let diff = target_x - current_x;
+        let diff_x = target_x - current_x;
 
-        if diff.abs() > 1.0 {
-            let move_amount = diff.signum() * LANE_TRANSITION_SPEED * lane_layout.lane_width * dt;
-            let new_x = if move_amount.abs() > diff.abs() {
+        if diff_x.abs() > 1.0 {
+            let move_amount = diff_x.signum() * LANE_TRANSITION_SPEED * lane_layout.lane_width * dt;
+            let new_x = if move_amount.abs() > diff_x.abs() {
                 target_x
             } else {
                 current_x + move_amount
@@ -699,6 +608,28 @@ pub fn move_players(
         } else {
             transform.translation.x = target_x;
             player.current_lane = player.target_lane;
+        }
+
+        if let Some(target_y) = target_y {
+            let min_y = -lane_layout.game_height / 2.0 + lane_layout.player_size / 2.0;
+            let max_y = lane_layout.game_height / 2.0 - lane_layout.player_size / 2.0;
+            let clamped_target_y = target_y.clamp(min_y, max_y);
+
+            let current_y = transform.translation.y;
+            let diff_y = clamped_target_y - current_y;
+
+            if diff_y.abs() > 1.0 {
+                let move_amount =
+                    diff_y.signum() * LANE_TRANSITION_SPEED * lane_layout.lane_width * dt;
+                let new_y = if move_amount.abs() > diff_y.abs() {
+                    clamped_target_y
+                } else {
+                    current_y + move_amount
+                };
+                transform.translation.y = new_y.clamp(min_y, max_y);
+            } else {
+                transform.translation.y = clamped_target_y;
+            }
         }
     }
 }
@@ -938,6 +869,13 @@ fn nose_to_world_x(nose_x: f32, layout: &LaneLayout) -> f32 {
     let norm_x = (clamped_x - CAMERA_USED_MARGIN) / CAMERA_USED_PORTION;
 
     (norm_x - 0.5) * layout.game_width
+}
+
+fn nose_to_world_y(nose_y: f32, layout: &LaneLayout) -> f32 {
+    let clamped_y = nose_y.clamp(CAMERA_USED_MARGIN, 1.0 - CAMERA_USED_MARGIN);
+    let norm_y = (clamped_y - CAMERA_USED_MARGIN) / CAMERA_USED_PORTION;
+
+    (0.5 - norm_y) * layout.game_height
 }
 
 fn world_x_to_lane(world_x: f32, center_x: f32, lane_width: f32) -> usize {

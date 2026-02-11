@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use crate::{AppState, assets::UiFont};
 
 use super::game::{
-    EndlessRunnerPhase, GameSettings, GameSpeed, NoseMarker, Obstacle, ObstacleSpawner, Player,
-    PlayerGameOverText, PlayerTargets, Scoreboard, spawn_hud, spawn_nose_markers,
+    EndlessRunnerPhase, GameSettings, GameSpeed, Obstacle, ObstacleSpawner, Player,
+    PlayerGameOverText, PlayerTargets, Scoreboard, spawn_hud,
 };
 use super::setup::spawn_setup_ui;
 use super::ui::{DistanceText, Player1DistanceText, Player2DistanceText};
@@ -213,7 +213,6 @@ pub fn handle_result_input(
     players: Query<Entity, With<Player>>,
     obstacles: Query<Entity, With<Obstacle>>,
     game_over_texts: Query<Entity, With<PlayerGameOverText>>,
-    nose_markers: Query<Entity, With<NoseMarker>>,
     distance_texts: Query<
         Entity,
         (
@@ -235,7 +234,6 @@ pub fn handle_result_input(
             &players,
             &obstacles,
             &game_over_texts,
-            &nose_markers,
             &distance_texts,
         );
     }
@@ -264,7 +262,6 @@ pub fn button_system(
     players: Query<Entity, With<Player>>,
     obstacles: Query<Entity, With<Obstacle>>,
     game_over_texts: Query<Entity, With<PlayerGameOverText>>,
-    nose_markers: Query<Entity, With<NoseMarker>>,
     distance_texts: Query<
         Entity,
         (
@@ -291,7 +288,6 @@ pub fn button_system(
                         &players,
                         &obstacles,
                         &game_over_texts,
-                        &nose_markers,
                         &distance_texts,
                     );
                 } else if menu.is_some() {
@@ -323,7 +319,6 @@ fn reset_game(
     players: &Query<Entity, With<Player>>,
     obstacles: &Query<Entity, With<Obstacle>>,
     game_over_texts: &Query<Entity, With<PlayerGameOverText>>,
-    nose_markers: &Query<Entity, With<NoseMarker>>,
     distance_texts: &Query<
         Entity,
         (
@@ -344,9 +339,6 @@ fn reset_game(
     for entity in game_over_texts.iter() {
         commands.entity(entity).despawn();
     }
-    for entity in nose_markers.iter() {
-        commands.entity(entity).despawn();
-    }
     for entity in distance_texts.iter() {
         commands.entity(entity).despawn();
     }
@@ -358,8 +350,6 @@ fn reset_game(
     commands.insert_resource(PlayerTargets::default());
 
     spawn_setup_ui(commands, ui_font, settings);
-
-    spawn_nose_markers(commands, settings);
 
     spawn_hud(commands, ui_font, settings);
 }

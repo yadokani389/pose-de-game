@@ -56,7 +56,6 @@ impl Plugin for EndlessRunnerPlugin {
                     setup::handle_setup_input.run_if(is_setup),
                     setup::handle_setup_phase.run_if(is_setup),
                     game::update_player_target_lane.run_if(is_playing),
-                    game::update_nose_markers.run_if(is_playing),
                     game::move_players.run_if(is_playing),
                     game::spawn_obstacles.run_if(is_playing),
                     game::move_obstacles.run_if(is_playing),

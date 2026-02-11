@@ -25,16 +25,16 @@ pub fn update_hud(
 
     for mut text in p1_query.iter_mut() {
         if settings.num_players == 1 {
-            **text = format!("{} m", distance1);
+            *text = Text::new(format!("{} m", distance1));
         } else {
-            **text = format!("P1: {} m", distance1);
+            *text = Text::new(format!("P1: {} m", distance1));
         }
     }
 
     if settings.num_players == 2 {
         let distance2 = scoreboard.player2_distance as u32;
         for mut text in p2_query.iter_mut() {
-            **text = format!("P2: {} m", distance2);
+            *text = Text::new(format!("P2: {} m", distance2));
         }
     }
 }

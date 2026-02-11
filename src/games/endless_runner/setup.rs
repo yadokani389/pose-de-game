@@ -3,9 +3,10 @@ use bevy::prelude::*;
 use crate::{AppState, assets::UiFont};
 
 use super::game::{
-    DarkOverlay, EndlessRunnerPhase, GameSettings, LaneLayout, LaneLine, NoseMarker, Player,
-    PlayerId, lane_to_x_for_player, spawn_lanes_and_overlays, spawn_nose_markers,
+    DarkOverlay, EndlessRunnerPhase, GameSettings, LaneLayout, LaneLine, Player, PlayerId,
+    lane_to_x_for_player, spawn_hud, spawn_lanes_and_overlays,
 };
+use super::ui;
 
 const PLAYER_Z: f32 = 10.0;
 
@@ -138,7 +139,6 @@ pub fn handle_setup_input(
     mut player_count_text: Query<&mut Text, With<PlayerCountText>>,
     lane_lines: Query<Entity, With<LaneLine>>,
     dark_overlays: Query<Entity, With<DarkOverlay>>,
-    nose_markers: Query<Entity, With<NoseMarker>>,
 ) {
     let mut changed = false;
 
@@ -163,12 +163,8 @@ pub fn handle_setup_input(
         for entity in dark_overlays.iter() {
             commands.entity(entity).despawn();
         }
-        for entity in nose_markers.iter() {
-            commands.entity(entity).despawn();
-        }
 
         spawn_lanes_and_overlays(&mut commands, &layout, &settings);
-        spawn_nose_markers(&mut commands, &settings);
     }
 }
 
@@ -179,6 +175,8 @@ pub fn handle_setup_phase(
     setup_text: Query<Entity, With<SetupText>>,
     settings: Res<GameSettings>,
     lane_layout: Res<LaneLayout>,
+    ui_font: Res<UiFont>,
+    distance_texts: Query<Entity, With<ui::DistanceText>>,
 ) {
     if input.just_pressed(KeyCode::Enter) {
         *phase = EndlessRunnerPhase::Playing;
@@ -186,6 +184,12 @@ pub fn handle_setup_phase(
         for entity in setup_text.iter() {
             commands.entity(entity).despawn();
         }
+
+        // Recreate HUD with the current player count (ensures P2 text exists when 2P is selected).
+        for entity in distance_texts.iter() {
+            commands.entity(entity).despawn();
+        }
+        spawn_hud(&mut commands, &ui_font, &settings);
 
         let player_size = lane_layout.player_size;
         let start_lane = 1;
