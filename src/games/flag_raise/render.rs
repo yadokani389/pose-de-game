@@ -212,6 +212,7 @@ fn spawn_rect(
 ) {
     commands.spawn((
         FlagRenderPart,
+        DespawnOnExit(AppState::FlagRaise),
         Mesh2d(mesh.clone()),
         MeshMaterial2d(material.clone()),
         Transform {
