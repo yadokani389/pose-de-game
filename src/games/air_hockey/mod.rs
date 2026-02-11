@@ -15,7 +15,7 @@ use crate::{
     assets::UiFont,
     pose::{
         LatestFrameRes, PeopleDataRes, disable_pose_frame_capture, disable_pose_runtime,
-        enable_pose_frame_capture, enable_pose_runtime,
+        enable_pose_frame_capture, enable_pose_runtime, estimate_center_x,
     },
 };
 
@@ -47,6 +47,8 @@ const SCORE_LAYER: usize = 3;
 const HAND_Y_SCALE: f32 = 2.0;
 const LEFT_HAND_KEYPOINT: usize = 9;
 const RIGHT_HAND_KEYPOINT: usize = 10;
+const PLAYER_SIDE_SPLIT_X: f64 = 0.5;
+const PLAYER_RELEASE_MARGIN_X: f64 = 0.08;
 const SCORE_FONT_SIZE: f32 = 48.0;
 const SCORE_EDGE_MARGIN: f32 = 20.0;
 const KEYMAP_FONT_SIZE: f32 = 20.0;
@@ -73,6 +75,7 @@ impl Plugin for AirHockeyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Scoreboard>()
             .init_resource::<MalletTargets>()
+            .init_resource::<PlayerAssignments>()
             .init_resource::<CameraOverlayState>()
             .init_resource::<HandSelection>()
             .init_resource::<AirHockeyPhase>()
@@ -263,6 +266,12 @@ struct MalletTargets {
     right: Vec2,
 }
 
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct PlayerAssignments {
+    left_player_id: Option<u64>,
+    right_player_id: Option<u64>,
+}
+
 impl Default for MalletTargets {
     fn default() -> Self {
         let half_height = BOARD_HEIGHT * 0.5;
@@ -301,6 +310,7 @@ fn setup(
     mut latest_frame: ResMut<LatestFrameRes>,
     mut overlay_state: ResMut<CameraOverlayState>,
     mut hand_selection: ResMut<HandSelection>,
+    mut player_assignments: ResMut<PlayerAssignments>,
     mut phase: ResMut<AirHockeyPhase>,
 ) {
     scoreboard.left = 0;
@@ -309,6 +319,7 @@ fn setup(
     overlay_state.visible = true;
     hand_selection.left = HandPreference::Right;
     hand_selection.right = HandPreference::Right;
+    *player_assignments = PlayerAssignments::default();
     *phase = AirHockeyPhase::Playing;
     commands.remove_resource::<AirHockeyResult>();
 
@@ -743,18 +754,23 @@ fn update_mallet_targets(
     people: Res<PeopleDataRes>,
     selection: Res<HandSelection>,
     mut targets: ResMut<MalletTargets>,
+    mut player_assignments: ResMut<PlayerAssignments>,
 ) {
     if !people.is_changed() && !selection.is_changed() {
         return;
     }
 
-    let mut people_hands: Vec<PersonHands> = people
+    let people_hands: Vec<PersonHands> = people
         .iter()
         .filter_map(|person| {
             let left = person.keypoints.get(LEFT_HAND_KEYPOINT).and_then(|kp| *kp);
             let right = person.keypoints.get(RIGHT_HAND_KEYPOINT).and_then(|kp| *kp);
-            let center_x = person_center_x(left, right)?;
+            let center_x = estimate_center_x(&person.keypoints)?;
+            if !center_x.is_finite() {
+                return None;
+            }
             Some(PersonHands {
+                id: person.id,
                 left,
                 right,
                 center_x,
@@ -762,49 +778,132 @@ fn update_mallet_targets(
         })
         .collect();
 
-    people_hands.sort_by(|a, b| {
-        a.center_x
-            .partial_cmp(&b.center_x)
-            .unwrap_or(Ordering::Equal)
-    });
+    let current_ids: Vec<u64> = people.iter().map(|person| person.id).collect();
 
-    match people_hands.len() {
-        0 => {}
-        1 => {
-            let person = &people_hands[0];
-            if person.center_x < 0.5 {
-                if let Some(hand) = select_hand(person, selection.left) {
-                    targets.left = map_hand_to_world(PlayerSide::Left, hand);
-                }
-            } else if let Some(hand) = select_hand(person, selection.right) {
-                targets.right = map_hand_to_world(PlayerSide::Right, hand);
-            }
-        }
-        _ => {
-            let left_person = &people_hands[0];
-            let right_person = &people_hands[people_hands.len() - 1];
-            if let Some(hand) = select_hand(left_person, selection.left) {
+    if let Some(left_id) = player_assignments.left_player_id
+        && !current_ids.contains(&left_id)
+    {
+        player_assignments.left_player_id = None;
+    }
+
+    if let Some(right_id) = player_assignments.right_player_id
+        && !current_ids.contains(&right_id)
+    {
+        player_assignments.right_player_id = None;
+    }
+
+    if let Some(left_id) = player_assignments.left_player_id
+        && let Some(center_x) = center_of_person(&people_hands, left_id)
+        && is_center_in_camera(center_x)
+        && is_out_of_player_side(center_x, PlayerSide::Left)
+    {
+        player_assignments.left_player_id = None;
+    }
+
+    if let Some(right_id) = player_assignments.right_player_id
+        && let Some(center_x) = center_of_person(&people_hands, right_id)
+        && is_center_in_camera(center_x)
+        && is_out_of_player_side(center_x, PlayerSide::Right)
+    {
+        player_assignments.right_player_id = None;
+    }
+
+    if player_assignments.left_player_id.is_some()
+        && player_assignments.left_player_id == player_assignments.right_player_id
+    {
+        player_assignments.right_player_id = None;
+    }
+
+    if player_assignments.left_player_id.is_none() {
+        player_assignments.left_player_id = pick_side_player(
+            &people_hands,
+            PlayerSide::Left,
+            player_assignments.right_player_id,
+        );
+    }
+
+    if player_assignments.right_player_id.is_none() {
+        player_assignments.right_player_id = pick_side_player(
+            &people_hands,
+            PlayerSide::Right,
+            player_assignments.left_player_id,
+        );
+    }
+
+    for person in &people_hands {
+        if Some(person.id) == player_assignments.left_player_id {
+            if let Some(hand) = select_hand(person, selection.left) {
                 targets.left = map_hand_to_world(PlayerSide::Left, hand);
             }
-            if let Some(hand) = select_hand(right_person, selection.right) {
-                targets.right = map_hand_to_world(PlayerSide::Right, hand);
-            }
+            continue;
+        }
+
+        if Some(person.id) == player_assignments.right_player_id
+            && let Some(hand) = select_hand(person, selection.right)
+        {
+            targets.right = map_hand_to_world(PlayerSide::Right, hand);
         }
     }
 }
 
 struct PersonHands {
+    id: u64,
     left: Option<[f64; 2]>,
     right: Option<[f64; 2]>,
     center_x: f64,
 }
 
-fn person_center_x(left: Option<[f64; 2]>, right: Option<[f64; 2]>) -> Option<f64> {
-    match (left, right) {
-        (Some(l), Some(r)) => Some((l[0] + r[0]) * 0.5),
-        (Some(l), None) => Some(l[0]),
-        (None, Some(r)) => Some(r[0]),
-        (None, None) => None,
+fn center_of_person(people_hands: &[PersonHands], person_id: u64) -> Option<f64> {
+    people_hands
+        .iter()
+        .find(|person| person.id == person_id)
+        .map(|person| person.center_x)
+}
+
+fn is_center_in_camera(center_x: f64) -> bool {
+    0.0 <= center_x && center_x <= 1.0
+}
+
+fn is_out_of_player_side(center_x: f64, side: PlayerSide) -> bool {
+    match side {
+        PlayerSide::Left => PLAYER_SIDE_SPLIT_X + PLAYER_RELEASE_MARGIN_X < center_x,
+        PlayerSide::Right => center_x < PLAYER_SIDE_SPLIT_X - PLAYER_RELEASE_MARGIN_X,
+    }
+}
+
+fn pick_side_player(
+    people_hands: &[PersonHands],
+    side: PlayerSide,
+    excluded_id: Option<u64>,
+) -> Option<u64> {
+    let candidates = people_hands.iter().filter(|person| {
+        if Some(person.id) == excluded_id {
+            return false;
+        }
+        if !is_center_in_camera(person.center_x) {
+            return false;
+        }
+        match side {
+            PlayerSide::Left => person.center_x <= PLAYER_SIDE_SPLIT_X,
+            PlayerSide::Right => PLAYER_SIDE_SPLIT_X <= person.center_x,
+        }
+    });
+
+    match side {
+        PlayerSide::Left => candidates
+            .min_by(|a, b| {
+                a.center_x
+                    .partial_cmp(&b.center_x)
+                    .unwrap_or(Ordering::Equal)
+            })
+            .map(|person| person.id),
+        PlayerSide::Right => candidates
+            .max_by(|a, b| {
+                a.center_x
+                    .partial_cmp(&b.center_x)
+                    .unwrap_or(Ordering::Equal)
+            })
+            .map(|person| person.id),
     }
 }
 
@@ -1376,6 +1475,7 @@ fn result_input(
     mut phase: ResMut<AirHockeyPhase>,
     mut scoreboard: ResMut<Scoreboard>,
     mut targets: ResMut<MalletTargets>,
+    mut player_assignments: ResMut<PlayerAssignments>,
     mut queries: ParamSet<(
         Query<(&Mallet, &mut Transform, &mut MalletKinematics)>,
         Query<(&mut Transform, &mut Velocity), With<Puck>>,
@@ -1391,6 +1491,7 @@ fn result_input(
             &mut phase,
             &mut scoreboard,
             &mut targets,
+            &mut player_assignments,
             &mut queries,
         );
     }
@@ -1412,6 +1513,7 @@ fn button_system(
     mut commands: Commands,
     mut scoreboard: ResMut<Scoreboard>,
     mut targets: ResMut<MalletTargets>,
+    mut player_assignments: ResMut<PlayerAssignments>,
     mut queries: ParamSet<(
         Query<(&Mallet, &mut Transform, &mut MalletKinematics)>,
         Query<(&mut Transform, &mut Velocity), With<Puck>>,
@@ -1432,6 +1534,7 @@ fn button_system(
                         &mut phase,
                         &mut scoreboard,
                         &mut targets,
+                        &mut player_assignments,
                         &mut queries,
                     );
                 } else if menu.is_some() {
@@ -1455,6 +1558,7 @@ fn reset_match(
     phase: &mut ResMut<AirHockeyPhase>,
     scoreboard: &mut ResMut<Scoreboard>,
     targets: &mut ResMut<MalletTargets>,
+    player_assignments: &mut ResMut<PlayerAssignments>,
     queries: &mut ParamSet<(
         Query<(&Mallet, &mut Transform, &mut MalletKinematics)>,
         Query<(&mut Transform, &mut Velocity), With<Puck>>,
@@ -1465,6 +1569,7 @@ fn reset_match(
     scoreboard.left = 0;
     scoreboard.right = 0;
     **targets = MalletTargets::default();
+    **player_assignments = PlayerAssignments::default();
 
     let left_mallet_pos = Vec2::new(0.0, -BOARD_HEIGHT * 0.25);
     let right_mallet_pos = Vec2::new(0.0, BOARD_HEIGHT * 0.25);

@@ -58,6 +58,7 @@ pub(super) fn exit_flag_raise(mut commands: Commands) {
     commands.remove_resource::<CommandRng>();
     commands.remove_resource::<super::game::CommandState>();
     commands.remove_resource::<super::game::Scoreboard>();
+    commands.remove_resource::<super::game::PlayerSlotAssignments>();
     commands.remove_resource::<super::game::GameTimer>();
     commands.remove_resource::<super::game::GameResult>();
     commands.remove_resource::<super::render::SlotLineAssets>();
@@ -72,6 +73,7 @@ pub(super) fn return_to_setup(
 ) {
     commands.remove_resource::<super::game::CommandState>();
     commands.remove_resource::<super::game::Scoreboard>();
+    commands.remove_resource::<super::game::PlayerSlotAssignments>();
     commands.remove_resource::<super::game::GameTimer>();
     commands.remove_resource::<super::game::GameResult>();
     spawn_setup_ui(commands, ui_font, settings);

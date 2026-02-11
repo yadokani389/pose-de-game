@@ -31,10 +31,16 @@ const ARM_ANGLE_SIGMA: f32 = 0.8;
 const LEFT_WRIST_INDEX: usize = 9;
 const RIGHT_WRIST_INDEX: usize = 10;
 const JUDGE_TEMPLATE_Y_OFFSET: f32 = 0.5;
+const SLOT_RELEASE_MARGIN_X: f64 = 0.08;
 
 #[derive(Resource, Default)]
 pub struct Scoreboard {
     pub scores: [u32; MAX_PLAYERS],
+}
+
+#[derive(Resource, Default)]
+pub struct PlayerSlotAssignments {
+    pub slot_player_ids: [Option<u64>; MAX_PLAYERS],
 }
 
 #[derive(Resource)]
@@ -627,6 +633,7 @@ pub fn start_game(commands: &mut Commands, time: &Time, rng: &mut PoseRng) {
     commands.insert_resource(GameTimer {
         timer: Timer::from_seconds(GAME_LIMIT_SECS, TimerMode::Once),
     });
+    commands.insert_resource(PlayerSlotAssignments::default());
     commands.remove_resource::<GameResult>();
 }
 
@@ -640,6 +647,7 @@ pub fn advance_turn_and_score(
     ui_font: Res<UiFont>,
     window: Query<&Window, With<PrimaryWindow>>,
     mut scoreboard: ResMut<Scoreboard>,
+    mut slot_assignments: ResMut<PlayerSlotAssignments>,
     mut command: ResMut<CommandState>,
     mut rng: ResMut<PoseRng>,
     mut game_timer: ResMut<GameTimer>,
@@ -668,6 +676,7 @@ pub fn advance_turn_and_score(
                 args.mirror_camera,
                 &settings,
                 &mut scoreboard,
+                &mut slot_assignments,
                 pose,
             );
             spawn_slot_judge_popups(&mut commands, &window, &settings, &ui_font, &slot_results);
@@ -681,6 +690,7 @@ pub fn advance_turn_and_score(
                     args.mirror_camera,
                     &settings,
                     &mut scoreboard,
+                    &mut slot_assignments,
                     pose,
                 );
                 spawn_slot_judge_popups(&mut commands, &window, &settings, &ui_font, &slot_results);
@@ -730,6 +740,7 @@ pub fn advance_turn_and_score(
                     args.mirror_camera,
                     &settings,
                     &mut scoreboard,
+                    &mut slot_assignments,
                     pose,
                 );
                 spawn_slot_judge_popups(&mut commands, &window, &settings, &ui_font, &slot_results);
@@ -762,9 +773,10 @@ fn judge_repeat_step(
     mirror_camera: bool,
     settings: &PoseSyncSettings,
     scoreboard: &mut Scoreboard,
+    slot_assignments: &mut PlayerSlotAssignments,
     pose: PoseTemplateId,
 ) -> [Option<SlotJudgeResult>; MAX_PLAYERS] {
-    let assignments = assign_people_to_slots(people, settings.player_count);
+    let assignments = assign_people_to_slots(people, settings.player_count, slot_assignments);
     let mut slot_results = [None; MAX_PLAYERS];
 
     for slot_index in 0..settings.player_count {
@@ -829,54 +841,165 @@ fn spawn_slot_judge_popups(
     }
 }
 
-fn assign_people_to_slots(people: &PeopleDataRes, player_count: usize) -> Vec<Option<usize>> {
+fn assign_people_to_slots(
+    people: &PeopleDataRes,
+    player_count: usize,
+    slot_assignments: &mut PlayerSlotAssignments,
+) -> Vec<Option<usize>> {
     if player_count == 0 {
         return Vec::new();
     }
 
-    let mut centers: Vec<(usize, f64)> = people
-        .iter()
-        .enumerate()
-        .filter_map(|(index, person)| {
-            let center_x = crate::pose::estimate_center_x(&person.keypoints)?;
-            if !(0.0..=1.0).contains(&center_x) {
-                return None;
-            }
-            Some((index, center_x))
-        })
-        .collect();
+    for slot in player_count..MAX_PLAYERS {
+        slot_assignments.slot_player_ids[slot] = None;
+    }
 
-    centers.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    let people_with_centers = collect_people_with_centers(people);
 
-    let mut assignments = vec![None; player_count];
     for slot_index in 0..player_count {
-        let slot_min = slot_index as f64 / player_count as f64;
-        let slot_max = (slot_index + 1) as f64 / player_count as f64;
-        let slot_center = (slot_min + slot_max) * 0.5;
-        let mut best: Option<(usize, f64)> = None;
-
-        for (person_index, center_x) in &centers {
-            if slot_index + 1 == player_count {
-                if *center_x < slot_min || slot_max < *center_x {
-                    continue;
-                }
-            } else if *center_x < slot_min || slot_max <= *center_x {
-                continue;
-            }
-
-            let distance = (*center_x - slot_center).abs();
-            match best {
-                Some((_, best_distance)) if best_distance <= distance => {}
-                _ => best = Some((*person_index, distance)),
-            }
+        let Some(person_id) = slot_assignments.slot_player_ids[slot_index] else {
+            continue;
+        };
+        if !person_exists(people, person_id) {
+            slot_assignments.slot_player_ids[slot_index] = None;
+            continue;
         }
-
-        if let Some((person_index, _)) = best {
-            assignments[slot_index] = Some(person_index);
+        let Some(center_x) = center_of_person(&people_with_centers, person_id) else {
+            continue;
+        };
+        if is_out_of_slot_range(center_x, slot_index, player_count) {
+            slot_assignments.slot_player_ids[slot_index] = None;
         }
     }
 
+    for slot_index in 0..player_count {
+        if slot_assignments.slot_player_ids[slot_index].is_some() {
+            continue;
+        }
+
+        let slot_center = slot_center_x(slot_index, player_count);
+        let mut best: Option<(u64, f64)> = None;
+        for person in &people_with_centers {
+            if is_person_assigned(slot_assignments, player_count, person.id) {
+                continue;
+            }
+            if !is_in_slot_acquire_range(person.center_x, slot_index, player_count) {
+                continue;
+            }
+
+            let distance = (person.center_x - slot_center).abs();
+            match best {
+                Some((_, best_distance)) if best_distance <= distance => {}
+                _ => best = Some((person.id, distance)),
+            }
+        }
+
+        if let Some((person_id, _)) = best {
+            slot_assignments.slot_player_ids[slot_index] = Some(person_id);
+        }
+    }
+
+    let mut assignments = vec![None; player_count];
+    for slot_index in 0..player_count {
+        let Some(person_id) = slot_assignments.slot_player_ids[slot_index] else {
+            continue;
+        };
+        assignments[slot_index] = index_of_person(people, person_id);
+    }
+
     assignments
+}
+
+#[derive(Clone, Copy)]
+struct PersonCenter {
+    id: u64,
+    center_x: f64,
+}
+
+fn collect_people_with_centers(people: &PeopleDataRes) -> Vec<PersonCenter> {
+    people
+        .iter()
+        .filter_map(|person| {
+            let center_x = crate::pose::estimate_center_x(&person.keypoints)?;
+            if !center_x.is_finite() {
+                return None;
+            }
+            Some(PersonCenter {
+                id: person.id,
+                center_x,
+            })
+        })
+        .collect()
+}
+
+fn center_of_person(people_with_centers: &[PersonCenter], person_id: u64) -> Option<f64> {
+    people_with_centers
+        .iter()
+        .find(|person| person.id == person_id)
+        .map(|person| person.center_x)
+}
+
+fn person_exists(people: &PeopleDataRes, person_id: u64) -> bool {
+    people.iter().any(|person| person.id == person_id)
+}
+
+fn index_of_person(people: &PeopleDataRes, person_id: u64) -> Option<usize> {
+    people
+        .iter()
+        .enumerate()
+        .find(|(_, person)| person.id == person_id)
+        .map(|(index, _)| index)
+}
+
+fn is_person_assigned(
+    slot_assignments: &PlayerSlotAssignments,
+    player_count: usize,
+    person_id: u64,
+) -> bool {
+    slot_assignments.slot_player_ids[..player_count]
+        .iter()
+        .flatten()
+        .any(|id| *id == person_id)
+}
+
+fn is_center_in_camera(center_x: f64) -> bool {
+    0.0 <= center_x && center_x <= 1.0
+}
+
+fn is_in_slot_acquire_range(center_x: f64, slot_index: usize, player_count: usize) -> bool {
+    if !is_center_in_camera(center_x) {
+        return false;
+    }
+
+    let slot_min = slot_min_x(slot_index, player_count);
+    let slot_max = slot_max_x(slot_index, player_count);
+    if slot_index + 1 == player_count {
+        slot_min <= center_x && center_x <= slot_max
+    } else {
+        slot_min <= center_x && center_x < slot_max
+    }
+}
+
+fn is_out_of_slot_range(center_x: f64, slot_index: usize, player_count: usize) -> bool {
+    if !is_center_in_camera(center_x) {
+        return true;
+    }
+
+    let slot_min = slot_min_x(slot_index, player_count) - SLOT_RELEASE_MARGIN_X;
+    let slot_max = slot_max_x(slot_index, player_count) + SLOT_RELEASE_MARGIN_X;
+    center_x < slot_min || slot_max < center_x
+}
+
+fn slot_center_x(slot_index: usize, player_count: usize) -> f64 {
+    (slot_min_x(slot_index, player_count) + slot_max_x(slot_index, player_count)) * 0.5
+}
+
+fn slot_min_x(slot_index: usize, player_count: usize) -> f64 {
+    slot_index as f64 / player_count as f64
+}
+
+fn slot_max_x(slot_index: usize, player_count: usize) -> f64 {
+    (slot_index + 1) as f64 / player_count as f64
 }
 
 fn evaluate_pose(

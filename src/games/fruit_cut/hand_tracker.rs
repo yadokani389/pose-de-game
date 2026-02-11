@@ -10,6 +10,8 @@ const LEFT_HAND_KEYPOINT: usize = 9;
 const RIGHT_HAND_KEYPOINT: usize = 10;
 const HAND_TIMEOUT: f32 = 0.5;
 const HAND_MATCH_DISTANCE: f32 = 100.0;
+const PLAYER_SIDE_SPLIT_X: f32 = 0.5;
+const PLAYER_RELEASE_MARGIN_X: f32 = 0.08;
 
 #[derive(Debug, Clone)]
 pub struct HandTrail {
@@ -105,8 +107,31 @@ pub fn update_hand_trackers(
 
     let mut detected_hands = Vec::new();
 
+    let current_ids: Vec<u64> = people.iter().map(|p| p.id).collect();
+    let people_with_centers = collect_people_with_centers(&people);
+
     if settings.player_count == 1 {
+        trackers.right_player_id = None;
+
+        if let Some(player_id) = trackers.left_player_id {
+            if !current_ids.contains(&player_id) {
+                trackers.left_player_id = None;
+            } else if let Some(center_x) = center_of_person(&people_with_centers, player_id)
+                && !is_center_in_camera(center_x)
+            {
+                trackers.left_player_id = None;
+            }
+        }
+
+        if trackers.left_player_id.is_none() {
+            trackers.left_player_id = pick_single_player(&people_with_centers);
+        }
+
         for person in people.iter() {
+            if Some(person.id) != trackers.left_player_id {
+                continue;
+            }
+
             if let Some(Some(left_hand)) = person.keypoints.get(LEFT_HAND_KEYPOINT) {
                 let position = map_pose_to_world(
                     Vec2::new(left_hand[0] as f32, left_hand[1] as f32),
@@ -132,8 +157,6 @@ pub fn update_hand_trackers(
             }
         }
     } else {
-        let current_ids: Vec<u64> = people.iter().map(|p| p.id).collect();
-
         if let Some(left_id) = trackers.left_player_id
             && !current_ids.contains(&left_id)
         {
@@ -146,37 +169,41 @@ pub fn update_hand_trackers(
             trackers.right_player_id = None;
         }
 
-        if trackers.left_player_id.is_none() || trackers.right_player_id.is_none() {
-            let mut people_with_centers: Vec<(u64, f32)> = Vec::new();
-
-            for person in people.iter() {
-                let center_x = estimate_person_center(&person.keypoints);
-                if let Some(center) = center_x {
-                    people_with_centers.push((person.id, center));
-                }
-            }
-
-            people_with_centers
-                .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
+        if let Some(left_id) = trackers.left_player_id
+            && let Some(center_x) = center_of_person(&people_with_centers, left_id)
+            && is_center_in_camera(center_x)
+            && is_out_of_player_side(center_x, PlayerSide::Left)
+        {
             trackers.left_player_id = None;
-            trackers.right_player_id = None;
+        }
 
-            if people_with_centers.len() == 1 {
-                let (id, center_x) = people_with_centers[0];
-                if center_x < 0.5 {
-                    trackers.left_player_id = Some(id);
-                } else {
-                    trackers.right_player_id = Some(id);
-                }
-            } else if people_with_centers.len() >= 2 {
-                if let Some((id, _)) = people_with_centers.get(0) {
-                    trackers.left_player_id = Some(*id);
-                }
-                if let Some((id, _)) = people_with_centers.get(1) {
-                    trackers.right_player_id = Some(*id);
-                }
-            }
+        if let Some(right_id) = trackers.right_player_id
+            && let Some(center_x) = center_of_person(&people_with_centers, right_id)
+            && is_center_in_camera(center_x)
+            && is_out_of_player_side(center_x, PlayerSide::Right)
+        {
+            trackers.right_player_id = None;
+        }
+
+        if trackers.left_player_id.is_some() && trackers.left_player_id == trackers.right_player_id
+        {
+            trackers.right_player_id = None;
+        }
+
+        if trackers.left_player_id.is_none() {
+            trackers.left_player_id = pick_side_player(
+                &people_with_centers,
+                PlayerSide::Left,
+                trackers.right_player_id,
+            );
+        }
+
+        if trackers.right_player_id.is_none() {
+            trackers.right_player_id = pick_side_player(
+                &people_with_centers,
+                PlayerSide::Right,
+                trackers.left_player_id,
+            );
         }
 
         for person in people.iter() {
@@ -286,4 +313,80 @@ fn estimate_person_center(keypoints: &[Option<[f64; 2]>]) -> Option<f32> {
     }
 
     None
+}
+
+fn collect_people_with_centers(people: &PeopleDataRes) -> Vec<(u64, f32)> {
+    let mut centers = Vec::new();
+    for person in people.iter() {
+        let Some(center_x) = estimate_person_center(&person.keypoints) else {
+            continue;
+        };
+        if center_x.is_finite() {
+            centers.push((person.id, center_x));
+        }
+    }
+    centers
+}
+
+fn center_of_person(people_with_centers: &[(u64, f32)], person_id: u64) -> Option<f32> {
+    people_with_centers
+        .iter()
+        .find(|(id, _)| *id == person_id)
+        .map(|(_, center_x)| *center_x)
+}
+
+fn is_center_in_camera(center_x: f32) -> bool {
+    0.0 <= center_x && center_x <= 1.0
+}
+
+fn is_out_of_player_side(center_x: f32, side: PlayerSide) -> bool {
+    match side {
+        PlayerSide::Left => PLAYER_SIDE_SPLIT_X + PLAYER_RELEASE_MARGIN_X < center_x,
+        PlayerSide::Right => center_x < PLAYER_SIDE_SPLIT_X - PLAYER_RELEASE_MARGIN_X,
+    }
+}
+
+fn pick_single_player(people_with_centers: &[(u64, f32)]) -> Option<u64> {
+    people_with_centers
+        .iter()
+        .filter(|(_, center_x)| is_center_in_camera(*center_x))
+        .min_by(|a, b| {
+            let a_dist = (a.1 - PLAYER_SIDE_SPLIT_X).abs();
+            let b_dist = (b.1 - PLAYER_SIDE_SPLIT_X).abs();
+            a_dist
+                .partial_cmp(&b_dist)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(id, _)| *id)
+}
+
+fn pick_side_player(
+    people_with_centers: &[(u64, f32)],
+    side: PlayerSide,
+    excluded_id: Option<u64>,
+) -> Option<u64> {
+    let candidate = people_with_centers
+        .iter()
+        .filter(|(id, center_x)| {
+            if Some(*id) == excluded_id {
+                return false;
+            }
+            if !is_center_in_camera(*center_x) {
+                return false;
+            }
+            match side {
+                PlayerSide::Left => *center_x <= PLAYER_SIDE_SPLIT_X,
+                PlayerSide::Right => PLAYER_SIDE_SPLIT_X <= *center_x,
+            }
+        })
+        .copied();
+
+    match side {
+        PlayerSide::Left => candidate
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(id, _)| id),
+        PlayerSide::Right => candidate
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(id, _)| id),
+    }
 }

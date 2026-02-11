@@ -56,6 +56,7 @@ pub(super) fn exit_pose_sync(mut commands: Commands) {
     commands.remove_resource::<PoseRng>();
     commands.remove_resource::<game::CommandState>();
     commands.remove_resource::<game::Scoreboard>();
+    commands.remove_resource::<game::PlayerSlotAssignments>();
     commands.remove_resource::<game::GameTimer>();
     commands.remove_resource::<game::GameResult>();
     commands.remove_resource::<render::SlotLineAssets>();
@@ -70,6 +71,7 @@ pub(super) fn return_to_setup(
 ) {
     commands.remove_resource::<game::CommandState>();
     commands.remove_resource::<game::Scoreboard>();
+    commands.remove_resource::<game::PlayerSlotAssignments>();
     commands.remove_resource::<game::GameTimer>();
     commands.remove_resource::<game::GameResult>();
     spawn_setup_ui(commands, ui_font, settings);

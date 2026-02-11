@@ -46,7 +46,8 @@ impl Plugin for PoseSyncPlugin {
                     .run_if(is_playing)
                     .run_if(resource_exists::<game::CommandState>)
                     .run_if(resource_exists::<game::GameTimer>)
-                    .run_if(resource_exists::<game::Scoreboard>),
+                    .run_if(resource_exists::<game::Scoreboard>)
+                    .run_if(resource_exists::<game::PlayerSlotAssignments>),
                 render::draw_pose_preview
                     .run_if(is_playing)
                     .run_if(resource_exists::<game::CommandState>),
