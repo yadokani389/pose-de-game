@@ -51,7 +51,7 @@ const PLAYER_RELEASE_MARGIN_X: f64 = 0.08;
 const SCORE_FONT_SIZE: f32 = 48.0;
 const SCORE_EDGE_MARGIN: f32 = 20.0;
 const KEYMAP_FONT_SIZE: f32 = 20.0;
-const WIN_SCORE: u32 = 10;
+const WIN_SCORE: u32 = 5;
 
 const RESULT_HEADER_SIZE: f32 = 52.0;
 const RESULT_TITLE_SIZE: f32 = 44.0;

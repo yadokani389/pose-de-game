@@ -6,7 +6,7 @@ use crate::utils::spawn_floating_text_popup;
 
 use super::{game_world_size, hand_tracker::HandTrackers};
 
-pub const GAME_DURATION: f32 = 60.0;
+pub const GAME_DURATION: f32 = 30.0;
 pub const GRAVITY: f32 = 600.0;
 const SLICE_MIN_VELOCITY: f32 = 0.0;
 pub const MIN_PLAYERS: usize = 1;

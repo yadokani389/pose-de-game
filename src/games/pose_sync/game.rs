@@ -14,7 +14,7 @@ use crate::{
 
 use super::settings::{Difficulty, MAX_PLAYERS, PoseSyncPhase, PoseSyncSettings};
 
-pub const GAME_LIMIT_SECS: f32 = 60.0;
+pub const GAME_LIMIT_SECS: f32 = 30.0;
 pub const SEQUENCE_LEN: usize = 3;
 const START_DELAY_SECS: f32 = 1.0;
 const REPEAT_JUDGE_DELAY_SECS: f32 = 0.18;

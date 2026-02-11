@@ -46,7 +46,7 @@ pub struct CommandState {
     pub mismatch_color: bool,
 }
 
-pub const GAME_LIMIT_SECS: f32 = 60.0;
+pub const GAME_LIMIT_SECS: f32 = 30.0;
 const TURN_MIN_RATIO: f32 = 0.75;
 const TURN_MOVE_CHANCE: f32 = 0.7;
 const DUAL_COMMAND_CHANCE: f32 = 0.35;
