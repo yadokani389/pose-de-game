@@ -23,17 +23,16 @@ const BOARD_WIDTH: f32 = 600.0;
 const BOARD_HEIGHT: f32 = 600.0;
 const BOARD_THICKNESS: f32 = 12.0;
 const CENTER_LINE_THICKNESS: f32 = 6.0;
-const GOAL_WIDTH: f32 = 150.0;
+const GOAL_WIDTH: f32 = 210.0;
 const CORNER_TRIANGLE_SIZE: f32 = 30.0;
 const CORNER_TRIANGLE_Z: f32 = 1.0;
 const WALL_INNER_OFFSET: f32 = BOARD_THICKNESS * 0.5;
 
 const PUCK_RADIUS: f32 = 16.0;
-const MALLET_RADIUS: f32 = 30.0;
+const MALLET_RADIUS: f32 = 40.0;
 const MALLET_MAX_SPEED: f32 = 2000.0;
 const MALLET_VELOCITY_SAMPLES: usize = 3;
 const MALLET_RESTITUTION: f32 = 1.0;
-const PUCK_START_SPEED: f32 = 360.0;
 const PUCK_MAX_SPEED: f32 = 720.0;
 const PUCK_DRAG_PER_SECOND: f32 = 0.9;
 const PUCK_STOP_SPEED: f32 = 5.0;
@@ -254,8 +253,8 @@ struct HandSelection {
 impl Default for HandSelection {
     fn default() -> Self {
         Self {
-            left: HandPreference::Right,
-            right: HandPreference::Right,
+            left: HandPreference::Left,
+            right: HandPreference::Left,
         }
     }
 }
@@ -317,8 +316,8 @@ fn setup(
     scoreboard.right = 0;
     latest_frame.frame = None;
     overlay_state.visible = true;
-    hand_selection.left = HandPreference::Right;
-    hand_selection.right = HandPreference::Right;
+    hand_selection.left = HandPreference::Left;
+    hand_selection.right = HandPreference::Left;
     *player_assignments = PlayerAssignments::default();
     *phase = AirHockeyPhase::Playing;
     commands.remove_resource::<AirHockeyResult>();
@@ -494,7 +493,7 @@ fn setup(
 
     commands.spawn((
         Puck,
-        Velocity(Vec2::new(0.0, PUCK_START_SPEED)),
+        Velocity(Vec2::ZERO),
         Mesh2d(meshes.add(Mesh::from(Circle::new(PUCK_RADIUS)))),
         MeshMaterial2d(materials.add(Color::WHITE)),
         Transform::from_xyz(0.0, 0.0, 4.0),
